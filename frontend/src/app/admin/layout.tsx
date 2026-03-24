@@ -1,24 +1,16 @@
 "use client"
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Database, Link as LinkIcon, Upload, FileSpreadsheet, Settings, Users, LogOut, Palette } from 'lucide-react'
+import { LayoutDashboard, Database, Upload, FileSpreadsheet, Users, LogOut, Palette, Shield, FolderOpen } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useAuth } from '@/components/AuthContext'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
 import { useEffect, useState } from 'react'
 
-const navItems = [
-  { href: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/admin/tables', icon: Database, label: 'Tabelas' },
-  { href: '/admin/import/sql', icon: Upload, label: 'Importar SQL' },
-  { href: '/admin/import/data', icon: FileSpreadsheet, label: 'Importar CSV/XLSX' },
-  { href: '/admin/users', icon: Users, label: 'Moderadores', adminOnly: true },
-]
-
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { user, isAuthenticated, isAdmin, logout } = useAuth()
+  const { user, isAuthenticated, isMaster, isAdmin, logout } = useAuth()
   const [showTheme, setShowTheme] = useState(false)
 
   useEffect(() => {
@@ -29,6 +21,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (!isAuthenticated) return null
 
+  // Build nav items based on role
+  const navItems: { href: string; icon: any; label: string }[] = [
+    { href: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
+  ]
+
+  if (isMaster) {
+    navItems.push({ href: '/admin/admins', icon: Shield, label: 'Administradores' })
+  }
+
+  if (isAdmin && !isMaster) {
+    navItems.push({ href: '/admin/groups', icon: FolderOpen, label: 'Database Groups' })
+    navItems.push({ href: '/admin/tables', icon: Database, label: 'Tabelas' })
+    navItems.push({ href: '/admin/import/sql', icon: Upload, label: 'Importar SQL' })
+    navItems.push({ href: '/admin/import/data', icon: FileSpreadsheet, label: 'Importar CSV/XLSX' })
+    navItems.push({ href: '/admin/users', icon: Users, label: 'Moderadores' })
+  }
+
+  if (user?.role === 'moderator') {
+    navItems.push({ href: '/admin/groups', icon: FolderOpen, label: 'Meus Grupos' })
+    navItems.push({ href: '/admin/tables', icon: Database, label: 'Tabelas' })
+    navItems.push({ href: '/admin/import/data', icon: FileSpreadsheet, label: 'Importar CSV/XLSX' })
+  }
+
+  const roleLabel = user?.role === 'master' ? 'Master' : user?.role === 'admin' ? 'Admin' : 'Moderador'
+
   return (
     <div className="min-h-screen flex" style={{ background: 'hsl(var(--color-bg))', color: 'hsl(var(--color-text))' }}>
       {/* Sidebar */}
@@ -38,22 +55,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             Dynamic CMS
           </h1>
           <p className="text-xs mt-1" style={{ color: 'hsl(var(--color-text-muted))' }}>
-            {user?.username} ({user?.role})
+            {user?.username}
           </p>
+          <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'hsl(var(--color-primary) / 0.15)', color: 'hsl(var(--color-primary))' }}>
+            {roleLabel}
+          </span>
         </div>
         
         <nav className="flex-1 space-y-1">
           {navItems.map((item) => {
-            if ((item as any).adminOnly && !isAdmin) return null
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+            const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href + '/'))
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-all duration-200",
-                  isActive ? "" : ""
-                )}
+                className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-all duration-200"
                 style={{
                   background: isActive ? 'hsl(var(--color-primary) / 0.12)' : 'transparent',
                   color: isActive ? 'hsl(var(--color-primary))' : 'hsl(var(--color-text-muted))',

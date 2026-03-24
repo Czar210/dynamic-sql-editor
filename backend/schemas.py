@@ -19,6 +19,32 @@ class UserResponse(UserBase):
     id: int
     parent_id: Optional[int] = None
 
+class PasswordReset(BaseModel):
+    new_password: str
+
+# Schema for Database Groups
+class DatabaseGroupCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class DatabaseGroupResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    description: Optional[str] = None
+    admin_id: int
+    created_at: datetime
+
+# Schema for Permissions
+class PermissionCreate(BaseModel):
+    moderator_id: int
+
+class PermissionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    moderator_id: int
+    database_group_id: int
+
 # Schema for Columns
 class ColumnBase(BaseModel):
     name: str
@@ -43,11 +69,13 @@ class TableBase(BaseModel):
 class TableCreate(TableBase):
     columns: List[ColumnCreate] = []
     is_public: bool = False
+    group_id: Optional[int] = None
 
 class TableResponse(TableBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     owner_id: int
+    group_id: Optional[int] = None
     is_public: bool = False
     created_at: datetime
     columns: List[ColumnResponse] = []

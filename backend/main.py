@@ -8,7 +8,11 @@ import io
 import models, schemas
 from database import engine, Base, get_db
 from dynamic_schema import create_physical_table
-from auth import auth_router, create_master_account, get_current_active_user, get_current_admin
+from auth import (
+    auth_router, create_master_account,
+    get_current_active_user, get_current_admin, get_current_master,
+    get_password_hash
+)
 
 # Create metadata tables if they don't exist
 Base.metadata.create_all(bind=engine)
@@ -18,12 +22,12 @@ db_seed = next(get_db())
 create_master_account(db_seed)
 db_seed.close()
 
-app = FastAPI(title="Dynamic Template API")
+app = FastAPI(title="Dynamic CMS API")
 
 # Setup CORS for Next.js
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,45 +40,253 @@ app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to Dynamic Template API"}
+    return {"message": "Welcome to Dynamic CMS API"}
 
 # ==========================================
-# User Management (Admin only)
-# ==========================================
-@app.get("/api/users", response_model=List[schemas.UserResponse])
-def list_users(db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
-    return db.query(models.User).all()
-
-# ==========================================
-# Table Management (Authenticated)
+# Master-Only: Admin Management
 # ==========================================
 
-def get_tenant_prefix(user: models.User) -> str:
-    """Get the tenant prefix for physical table names"""
-    owner_id = user.id if user.role == "admin" else user.parent_id
-    return f"t{owner_id}_"
+@app.post("/api/admins", response_model=schemas.UserResponse)
+def create_admin(user_data: schemas.UserCreate, db: Session = Depends(get_db), master: models.User = Depends(get_current_master)):
+    if db.query(models.User).filter(models.User.username == user_data.username).first():
+        raise HTTPException(status_code=400, detail="Username already exists")
+    new_admin = models.User(
+        username=user_data.username,
+        password_hash=get_password_hash(user_data.password),
+        role="admin",
+        parent_id=master.id
+    )
+    db.add(new_admin)
+    db.commit()
+    db.refresh(new_admin)
+    return new_admin
+
+@app.get("/api/admins", response_model=List[schemas.UserResponse])
+def list_admins(db: Session = Depends(get_db), master: models.User = Depends(get_current_master)):
+    return db.query(models.User).filter(models.User.role == "admin").all()
+
+@app.delete("/api/admins/{admin_id}")
+def delete_admin(admin_id: int, db: Session = Depends(get_db), master: models.User = Depends(get_current_master)):
+    admin = db.query(models.User).filter(models.User.id == admin_id, models.User.role == "admin").first()
+    if not admin:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    db.delete(admin)
+    db.commit()
+    return {"message": "Admin deleted"}
+
+@app.get("/api/all-users", response_model=List[schemas.UserResponse])
+def list_all_users(db: Session = Depends(get_db), master: models.User = Depends(get_current_master)):
+    """Master can see all users"""
+    return db.query(models.User).filter(models.User.role != "master").all()
+
+# ==========================================
+# Admin: Moderator Management
+# ==========================================
+
+@app.post("/api/moderators", response_model=schemas.UserResponse)
+def create_moderator(user_data: schemas.UserCreate, db: Session = Depends(get_db), admin: models.User = Depends(get_current_admin)):
+    if admin.role == "master":
+        raise HTTPException(status_code=403, detail="Use /api/admins to create admins. Moderators are created by admins.")
+    if db.query(models.User).filter(models.User.username == user_data.username).first():
+        raise HTTPException(status_code=400, detail="Username already exists")
+    new_mod = models.User(
+        username=user_data.username,
+        password_hash=get_password_hash(user_data.password),
+        role="moderator",
+        parent_id=admin.id
+    )
+    db.add(new_mod)
+    db.commit()
+    db.refresh(new_mod)
+    return new_mod
+
+@app.get("/api/moderators", response_model=List[schemas.UserResponse])
+def list_moderators(db: Session = Depends(get_db), admin: models.User = Depends(get_current_admin)):
+    if admin.role == "master":
+        return db.query(models.User).filter(models.User.role == "moderator").all()
+    return db.query(models.User).filter(models.User.parent_id == admin.id, models.User.role == "moderator").all()
+
+@app.delete("/api/moderators/{mod_id}")
+def delete_moderator(mod_id: int, db: Session = Depends(get_db), admin: models.User = Depends(get_current_admin)):
+    mod = db.query(models.User).filter(models.User.id == mod_id, models.User.role == "moderator").first()
+    if not mod:
+        raise HTTPException(status_code=404, detail="Moderator not found")
+    if admin.role != "master" and mod.parent_id != admin.id:
+        raise HTTPException(status_code=403, detail="Not your moderator")
+    db.delete(mod)
+    db.commit()
+    return {"message": "Moderator deleted"}
+
+@app.post("/api/moderators/{mod_id}/reset-password")
+def reset_moderator_password(mod_id: int, body: schemas.PasswordReset, db: Session = Depends(get_db), admin: models.User = Depends(get_current_admin)):
+    mod = db.query(models.User).filter(models.User.id == mod_id, models.User.role == "moderator").first()
+    if not mod:
+        raise HTTPException(status_code=404, detail="Moderator not found")
+    if admin.role != "master" and mod.parent_id != admin.id:
+        raise HTTPException(status_code=403, detail="Not your moderator")
+    mod.password_hash = get_password_hash(body.new_password)
+    db.commit()
+    return {"message": "Password reset successfully"}
+
+# ==========================================
+# Admin: Database Group Management
+# ==========================================
+
+@app.post("/api/database-groups", response_model=schemas.DatabaseGroupResponse)
+def create_database_group(group: schemas.DatabaseGroupCreate, db: Session = Depends(get_db), admin: models.User = Depends(get_current_admin)):
+    if admin.role == "master":
+        raise HTTPException(status_code=403, detail="Master cannot own database groups. Create an admin first.")
+    new_group = models.DatabaseGroup(
+        name=group.name,
+        description=group.description,
+        admin_id=admin.id
+    )
+    db.add(new_group)
+    db.commit()
+    db.refresh(new_group)
+    return new_group
+
+@app.get("/api/database-groups", response_model=List[schemas.DatabaseGroupResponse])
+def list_database_groups(db: Session = Depends(get_db), user: models.User = Depends(get_current_active_user)):
+    if user.role == "master":
+        return db.query(models.DatabaseGroup).all()
+    elif user.role == "admin":
+        return db.query(models.DatabaseGroup).filter(models.DatabaseGroup.admin_id == user.id).all()
+    else:
+        # Moderator: only groups they have permission to
+        perm_groups = db.query(models.ModeratorPermission.database_group_id).filter(
+            models.ModeratorPermission.moderator_id == user.id
+        ).subquery()
+        return db.query(models.DatabaseGroup).filter(models.DatabaseGroup.id.in_(perm_groups)).all()
+
+@app.delete("/api/database-groups/{group_id}")
+def delete_database_group(group_id: int, db: Session = Depends(get_db), admin: models.User = Depends(get_current_admin)):
+    group = db.query(models.DatabaseGroup).filter(models.DatabaseGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    if admin.role != "master" and group.admin_id != admin.id:
+        raise HTTPException(status_code=403, detail="Not your group")
+    db.delete(group)
+    db.commit()
+    return {"message": "Database group deleted"}
+
+# ==========================================
+# Admin: Permission Management
+# ==========================================
+
+@app.post("/api/database-groups/{group_id}/permissions", response_model=schemas.PermissionResponse)
+def grant_permission(group_id: int, perm: schemas.PermissionCreate, db: Session = Depends(get_db), admin: models.User = Depends(get_current_admin)):
+    group = db.query(models.DatabaseGroup).filter(models.DatabaseGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    if admin.role != "master" and group.admin_id != admin.id:
+        raise HTTPException(status_code=403, detail="Not your group")
+    
+    # Verify the moderator exists and belongs to this admin
+    mod = db.query(models.User).filter(models.User.id == perm.moderator_id, models.User.role == "moderator").first()
+    if not mod:
+        raise HTTPException(status_code=404, detail="Moderator not found")
+    if admin.role != "master" and mod.parent_id != admin.id:
+        raise HTTPException(status_code=403, detail="Not your moderator")
+    
+    # Check if already exists
+    existing = db.query(models.ModeratorPermission).filter(
+        models.ModeratorPermission.moderator_id == perm.moderator_id,
+        models.ModeratorPermission.database_group_id == group_id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Permission already exists")
+    
+    new_perm = models.ModeratorPermission(moderator_id=perm.moderator_id, database_group_id=group_id)
+    db.add(new_perm)
+    db.commit()
+    db.refresh(new_perm)
+    return new_perm
+
+@app.delete("/api/database-groups/{group_id}/permissions/{mod_id}")
+def revoke_permission(group_id: int, mod_id: int, db: Session = Depends(get_db), admin: models.User = Depends(get_current_admin)):
+    perm = db.query(models.ModeratorPermission).filter(
+        models.ModeratorPermission.database_group_id == group_id,
+        models.ModeratorPermission.moderator_id == mod_id
+    ).first()
+    if not perm:
+        raise HTTPException(status_code=404, detail="Permission not found")
+    db.delete(perm)
+    db.commit()
+    return {"message": "Permission revoked"}
+
+# ==========================================
+# Helper: get accessible owner_id for tenant prefix
+# ==========================================
+
+def get_tenant_prefix(user: models.User, db: Session = None) -> str:
+    """Get the tenant prefix for physical table names based on the admin owner."""
+    if user.role == "master":
+        return "master_"
+    elif user.role == "admin":
+        return f"t{user.id}_"
+    else:
+        # Moderator uses their parent admin's prefix
+        return f"t{user.parent_id}_"
+
+def get_accessible_tables(user: models.User, db: Session):
+    """Get tables accessible to the current user based on role and permissions."""
+    if user.role == "master":
+        return db.query(models.DynamicTable).all()
+    elif user.role == "admin":
+        return db.query(models.DynamicTable).filter(models.DynamicTable.owner_id == user.id).all()
+    else:
+        # Moderator: only tables in permitted groups
+        perm_groups = db.query(models.ModeratorPermission.database_group_id).filter(
+            models.ModeratorPermission.moderator_id == user.id
+        ).subquery()
+        return db.query(models.DynamicTable).filter(models.DynamicTable.group_id.in_(perm_groups)).all()
+
+# ==========================================
+# Table Management
+# ==========================================
 
 @app.post("/tables/", response_model=schemas.TableResponse)
 def create_table(table: schemas.TableCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
-    # Only admins can create tables
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only admins can create tables")
+    # Moderators and admins can create tables
+    if current_user.role == "master":
+        raise HTTPException(status_code=403, detail="Master cannot create tables directly. Use an admin account.")
     
-    # 1. Register in meta table with owner
+    # Determine owner (admin or mod's parent admin)
+    if current_user.role == "admin":
+        owner_id = current_user.id
+    else:
+        owner_id = current_user.parent_id
+    
+    # Validate group access if group_id is provided
+    if table.group_id:
+        group = db.query(models.DatabaseGroup).filter(models.DatabaseGroup.id == table.group_id).first()
+        if not group:
+            raise HTTPException(status_code=404, detail="Database group not found")
+        if current_user.role == "admin" and group.admin_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not your group")
+        if current_user.role == "moderator":
+            has_perm = db.query(models.ModeratorPermission).filter(
+                models.ModeratorPermission.moderator_id == current_user.id,
+                models.ModeratorPermission.database_group_id == table.group_id
+            ).first()
+            if not has_perm:
+                raise HTTPException(status_code=403, detail="No permission for this group")
+    
+    # 1. Register in meta table
     db_table = models.DynamicTable(
         name=table.name,
         description=table.description,
-        owner_id=current_user.id,
+        owner_id=owner_id,
+        group_id=table.group_id,
         is_public=table.is_public if hasattr(table, 'is_public') else False
     )
     db.add(db_table)
     db.commit()
     db.refresh(db_table)
     
-    created_columns = []
-    cols_data_for_ddl = []
-    
     # 2. Register columns
+    cols_data_for_ddl = []
     for col in table.columns:
         db_col = models.DynamicColumn(
             table_id=db_table.id,
@@ -85,7 +297,6 @@ def create_table(table: schemas.TableCreate, db: Session = Depends(get_db), curr
             is_primary=col.is_primary
         )
         db.add(db_col)
-        created_columns.append(db_col)
         cols_data_for_ddl.append({
             'name': col.name,
             'data_type': col.data_type,
@@ -93,15 +304,13 @@ def create_table(table: schemas.TableCreate, db: Session = Depends(get_db), curr
             'is_unique': col.is_unique,
             'is_primary': col.is_primary
         })
-        
     db.commit()
     
-    # 3. Create Physical Table with tenant prefix
+    # 3. Create physical table with tenant prefix
     prefix = get_tenant_prefix(current_user)
     physical_name = f"{prefix}{table.name}"
     success, msg = create_physical_table(physical_name, cols_data_for_ddl)
     if not success:
-        # Rollback meta entries if physical creation fails
         db.delete(db_table)
         db.commit()
         raise HTTPException(status_code=400, detail=msg)
@@ -111,24 +320,23 @@ def create_table(table: schemas.TableCreate, db: Session = Depends(get_db), curr
 
 @app.get("/tables/", response_model=List[schemas.TableResponse])
 def get_tables(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
-    # Admin sees their own tables; Moderator sees tables from their parent admin
-    if current_user.role == "admin":
-        return db.query(models.DynamicTable).filter(models.DynamicTable.owner_id == current_user.id).all()
-    else:
-        return db.query(models.DynamicTable).filter(models.DynamicTable.owner_id == current_user.parent_id).all()
+    return get_accessible_tables(current_user, db)
 
 @app.patch("/tables/{table_id}/visibility")
-def toggle_table_visibility(table_id: int, db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
-    table = db.query(models.DynamicTable).filter(models.DynamicTable.id == table_id, models.DynamicTable.owner_id == current_admin.id).first()
+def toggle_table_visibility(table_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin)):
+    table = db.query(models.DynamicTable).filter(models.DynamicTable.id == table_id).first()
     if not table:
         raise HTTPException(status_code=404, detail="Table not found")
+    if current_user.role != "master" and table.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your table")
     table.is_public = not table.is_public
     db.commit()
     return {"is_public": table.is_public}
 
 # ==========================================
-# Public Tables (No Auth needed)
+# Public Tables (No Auth)
 # ==========================================
+
 @app.get("/public/tables/")
 def get_public_tables(db: Session = Depends(get_db)):
     tables = db.query(models.DynamicTable).filter(models.DynamicTable.is_public == True).all()
@@ -136,8 +344,10 @@ def get_public_tables(db: Session = Depends(get_db)):
 
 @app.get("/public/api/{table_name}")
 def get_public_records(table_name: str, db: Session = Depends(get_db)):
-    # Find the table in metadata to confirm it's public
-    db_table = db.query(models.DynamicTable).filter(models.DynamicTable.name == table_name, models.DynamicTable.is_public == True).first()
+    db_table = db.query(models.DynamicTable).filter(
+        models.DynamicTable.name == table_name,
+        models.DynamicTable.is_public == True
+    ).first()
     if not db_table:
         raise HTTPException(status_code=404, detail="Table not found or not public")
     
@@ -152,46 +362,54 @@ def get_public_records(table_name: str, db: Session = Depends(get_db)):
     
     stmt = select(table)
     result = db.execute(stmt)
-    records = [dict(row._mapping) for row in result.fetchall()]
-    return records
+    return [dict(row._mapping) for row in result.fetchall()]
 
 # ==========================================
-# Dynamic Data Endpoints (CRUD - Authenticated)
+# Dynamic Data CRUD (Authenticated)
 # ==========================================
 
 @app.post("/api/{table_name}")
 async def create_record(table_name: str, request: Request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
-    prefix = get_tenant_prefix(current_user)
+    # Find the table in metadata to get owner_id
+    accessible = get_accessible_tables(current_user, db)
+    db_table = next((t for t in accessible if t.name == table_name), None)
+    if not db_table:
+        raise HTTPException(status_code=404, detail="Table not found or no access")
+    
+    prefix = f"t{db_table.owner_id}_"
     physical_name = f"{prefix}{table_name}"
     
     meta = MetaData()
     try:
         table = Table(physical_name, meta, autoload_with=engine)
     except Exception:
-        raise HTTPException(status_code=404, detail="Table not found.")
-        
+        raise HTTPException(status_code=404, detail="Physical table not found")
+    
     data = await request.json()
     stmt = insert(table).values(**data)
     result = db.execute(stmt)
     db.commit()
-    
     return {"message": "Record inserted", "id": result.inserted_primary_key[0]}
 
 @app.get("/api/{table_name}")
 def get_records(table_name: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
-    prefix = get_tenant_prefix(current_user)
+    accessible = get_accessible_tables(current_user, db)
+    db_table = next((t for t in accessible if t.name == table_name), None)
+    if not db_table:
+        raise HTTPException(status_code=404, detail="Table not found or no access")
+    
+    prefix = f"t{db_table.owner_id}_"
     physical_name = f"{prefix}{table_name}"
     
     meta = MetaData()
     try:
         table = Table(physical_name, meta, autoload_with=engine)
     except Exception:
-        raise HTTPException(status_code=404, detail=f"Table {table_name} not found.")
-        
+        raise HTTPException(status_code=404, detail=f"Physical table {table_name} not found")
+    
     stmt = select(table)
     result = db.execute(stmt)
-    records = [dict(row._mapping) for row in result.fetchall()]
-    return records
+    return [dict(row._mapping) for row in result.fetchall()]
 
 # ==========================================
 # SQL Script Import (Admin only)
@@ -202,6 +420,9 @@ ALLOWED_SQL_TYPES = {'CREATE', 'INSERT'}
 
 @app.post("/api/import/sql")
 async def import_sql_script(file: UploadFile = File(...), db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
+    if current_admin.role == "master":
+        raise HTTPException(status_code=403, detail="Use an admin account for imports")
+    
     content = await file.read()
     sql_text = content.decode("utf-8")
     
@@ -225,12 +446,10 @@ async def import_sql_script(file: UploadFile = File(...), db: Session = Depends(
             continue
         
         if stmt_type and stmt_type.upper() == 'CREATE':
-            # Extract table name from CREATE TABLE statement
             tokens = [t for t in parsed.tokens if not t.is_whitespace]
             table_name = None
             for i, token in enumerate(tokens):
                 if token.ttype is sqlparse.tokens.Keyword and token.value.upper() == 'TABLE':
-                    # Next non-whitespace token is the table name
                     remaining = tokens[i+1:]
                     for t in remaining:
                         if hasattr(t, 'get_real_name') and t.get_real_name():
@@ -242,24 +461,21 @@ async def import_sql_script(file: UploadFile = File(...), db: Session = Depends(
                     break
             
             if table_name:
-                # Replace table name with prefixed version in the SQL
                 physical_name = f"{prefix}{table_name}"
                 prefixed_stmt = stmt.replace(table_name, physical_name, 1)
                 try:
                     db.execute(text(prefixed_stmt))
                     db.commit()
                     
-                    # Register in metadata
                     db_table = models.DynamicTable(
                         name=table_name,
-                        description=f"Imported from SQL script: {file.filename}",
+                        description=f"Imported from: {file.filename}",
                         owner_id=current_admin.id,
                         is_public=False
                     )
                     db.add(db_table)
                     db.commit()
                     
-                    # Reflect columns and register them
                     meta = MetaData()
                     reflected = Table(physical_name, meta, autoload_with=engine)
                     for col in reflected.columns:
@@ -274,14 +490,12 @@ async def import_sql_script(file: UploadFile = File(...), db: Session = Depends(
                         )
                         db.add(db_col)
                     db.commit()
-                    
                     created_tables.append(table_name)
                 except Exception as e:
                     db.rollback()
                     errors.append(f"CREATE error for {table_name}: {str(e)}")
         
         elif stmt_type and stmt_type.upper() == 'INSERT':
-            # Extract table name from INSERT INTO statement
             tokens = [t for t in parsed.tokens if not t.is_whitespace]
             table_name = None
             for i, token in enumerate(tokens):
@@ -307,28 +521,32 @@ async def import_sql_script(file: UploadFile = File(...), db: Session = Depends(
                     db.rollback()
                     errors.append(f"INSERT error: {str(e)}")
     
-    return {
-        "created_tables": created_tables,
-        "inserted_rows": inserted_rows,
-        "errors": errors
-    }
+    return {"created_tables": created_tables, "inserted_rows": inserted_rows, "errors": errors}
 
 # ==========================================
-# CSV / XLSX Data Import (Admin only)
+# CSV / XLSX Data Import (Moderator + Admin)
 # ==========================================
 import pandas as pd
 
 @app.post("/api/import/data/{table_name}")
-async def import_data_file(table_name: str, file: UploadFile = File(...), db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
-    prefix = get_tenant_prefix(current_admin)
+async def import_data_file(table_name: str, file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+    if current_user.role == "master":
+        raise HTTPException(status_code=403, detail="Use an admin or moderator account for data imports")
+    
+    # Find accessible table
+    accessible = get_accessible_tables(current_user, db)
+    db_table = next((t for t in accessible if t.name == table_name), None)
+    if not db_table:
+        raise HTTPException(status_code=404, detail="Table not found or no access")
+    
+    prefix = f"t{db_table.owner_id}_"
     physical_name = f"{prefix}{table_name}"
     
-    # Verify table exists
     meta = MetaData()
     try:
         table = Table(physical_name, meta, autoload_with=engine)
     except Exception:
-        raise HTTPException(status_code=404, detail=f"Table {table_name} not found.")
+        raise HTTPException(status_code=404, detail=f"Table {table_name} not found")
     
     content = await file.read()
     filename = file.filename.lower()
@@ -339,30 +557,25 @@ async def import_data_file(table_name: str, file: UploadFile = File(...), db: Se
         elif filename.endswith(".xlsx") or filename.endswith(".xls"):
             df = pd.read_excel(io.BytesIO(content))
         else:
-            raise HTTPException(status_code=400, detail="Only .csv and .xlsx/.xls files are supported.")
+            raise HTTPException(status_code=400, detail="Only .csv and .xlsx/.xls files are supported")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
     
-    # Get valid column names from the physical table
     valid_columns = [col.name for col in table.columns]
-    
-    # Filter dataframe to only include valid columns
     matching_columns = [col for col in df.columns if col in valid_columns]
     if not matching_columns:
         raise HTTPException(status_code=400, detail=f"No matching columns found. Expected: {valid_columns}")
     
     df_filtered = df[matching_columns]
-    
-    # Replace NaN with None for SQL compatibility
     df_filtered = df_filtered.where(pd.notnull(df_filtered), None)
-    
     records = df_filtered.to_dict(orient="records")
     
     inserted = 0
     errors = []
     for record in records:
         try:
-            # Remove None values for columns that shouldn't be null
             clean_record = {k: v for k, v in record.items() if v is not None}
             if clean_record:
                 stmt = insert(table).values(**clean_record)
@@ -372,10 +585,4 @@ async def import_data_file(table_name: str, file: UploadFile = File(...), db: Se
             errors.append(str(e))
     
     db.commit()
-    
-    return {
-        "inserted_rows": inserted,
-        "total_rows": len(records),
-        "matched_columns": matching_columns,
-        "errors": errors[:10]  # Limit error output
-    }
+    return {"inserted_rows": inserted, "total_rows": len(records), "matched_columns": matching_columns, "errors": errors[:10]}

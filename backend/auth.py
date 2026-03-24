@@ -12,7 +12,7 @@ import bcrypt
 
 SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-key-123")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
@@ -27,22 +27,18 @@ def get_password_hash(password: str):
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def create_master_account(db: Session):
-    user = db.query(models.User).filter(models.User.username == "monochaco").first()
+    """Seed the master account on first startup"""
+    user = db.query(models.User).filter(models.User.username == "puczaras").first()
     if not user:
-        hashed_password = get_password_hash("bodes123")
         master_user = models.User(
-            username="monochaco",
-            password_hash=hashed_password,
-            role="admin"
+            username="puczaras",
+            password_hash=get_password_hash("Zup Paras"),
+            role="master"
         )
         db.add(master_user)
         db.commit()
@@ -68,12 +64,16 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 async def get_current_active_user(current_user: models.User = Depends(get_current_user)):
     return current_user
 
+async def get_current_master(current_user: models.User = Depends(get_current_active_user)):
+    """Only master role can access"""
+    if current_user.role != "master":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Master access required")
+    return current_user
+
 async def get_current_admin(current_user: models.User = Depends(get_current_active_user)):
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="The user doesn't have enough privileges"
-        )
+    """Admin or master can access"""
+    if current_user.role not in ("admin", "master"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
 
 auth_router = APIRouter()
@@ -92,20 +92,3 @@ def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2Passw
         data={"sub": user.username, "role": user.role, "id": user.id}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer", "user": {"id": user.id, "username": user.username, "role": user.role}}
-
-@auth_router.post("/register-moderator")
-def register_moderator(moderator: schemas.UserCreate, db: Session = Depends(get_db), current_admin: models.User = Depends(get_current_admin)):
-    db_user = db.query(models.User).filter(models.User.username == moderator.username).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
-    
-    hashed_password = get_password_hash(moderator.password)
-    new_mod = models.User(
-        username=moderator.username,
-        password_hash=hashed_password,
-        role="moderator",
-        parent_id=current_admin.id
-    )
-    db.add(new_mod)
-    db.commit()
-    return {"message": "Moderator created successfully"}

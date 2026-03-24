@@ -47,8 +47,8 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 API runs at `http://localhost:8000`. A master account is automatically created on first launch:
-- **Username:** `monochaco`
-- **Password:** `bodes123`
+- **Username:** `puczaras`
+- **Password:** `Zup Paras`
 
 ### 2. Frontend
 ```bash

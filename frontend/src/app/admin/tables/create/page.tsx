@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Trash2, ArrowLeft, Loader2, Save } from "lucide-react"
 import Link from "next/link"
@@ -10,11 +10,20 @@ export default function CreateTable() {
   const { token } = useAuth()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
+  const [groupId, setGroupId] = useState<number | null>(null)
+  const [groups, setGroups] = useState<any[]>([])
   const [columns, setColumns] = useState([
     { id: 1, name: "title", data_type: "String", is_nullable: false, is_unique: false }
   ])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
+
+  const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
+  useEffect(() => {
+    fetch(`${API}/api/database-groups`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(setGroups).catch(console.error)
+  }, [API, token])
 
   const addColumn = () => {
     setColumns([...columns, { id: Date.now(), name: "", data_type: "String", is_nullable: true, is_unique: false }])
@@ -35,15 +44,16 @@ export default function CreateTable() {
     setError("")
     
     try {
-      const payload = {
+      const payload: any = {
         name: name.toLowerCase(),
         description,
-        columns: columns.map(c => ({
+        group_id: groupId,
+        columns: columns.map((c: any) => ({
           name: c.name.toLowerCase().replace(/\\s+/g, '_'),
           data_type: c.data_type,
           is_nullable: c.is_nullable,
           is_unique: c.is_unique,
-          is_primary: false // backend auto adds an ID if there is none
+          is_primary: false
         }))
       }
 
