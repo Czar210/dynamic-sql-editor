@@ -56,7 +56,6 @@ export default function PublicDashboard() {
           <GridLayout 
             className="layout" 
             layout={layout} 
-            cols={12} 
             rowHeight={100} 
             width={1200} // This would normally use a ResponsiveGridLayout but for simplicity we fix it or manage it via resize listeners
             isDraggable={true}
