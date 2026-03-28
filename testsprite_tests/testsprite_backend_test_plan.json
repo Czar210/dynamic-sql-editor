@@ -27,7 +27,7 @@
   {
     "id": "TC006",
     "title": "post api admins create and delete admin as master",
-    "description": "IMPORTANT: The seed user puczaras has role=master, NOT admin. Test: 1) Master creates admin via POST /api/admins, 2) Master lists admins via GET /api/admins, 3) Master deletes admin via DELETE /api/admins/{id}. Verify 403 for non-master."
+    "description": "IMPORTANT: puczaras has role=master, NOT admin. Steps: 1) Master creates admin (unique UUID username) via POST /api/admins, 2) Login as that admin (json body), 3) Attempt to create another admin as non-master (POST /api/admins) — must return 403, 4) Master lists admins via GET /api/admins — verify new admin is in list, 5) Master deletes admin via DELETE /api/admins/{id}, 6) Cleanup. NOTE: Do the 403 check (step 3) BEFORE deleting the admin (step 5) — the admin user must still exist to login."
   },
   {
     "id": "TC007",
@@ -37,7 +37,7 @@
   {
     "id": "TC008",
     "title": "database groups and moderator permissions lifecycle",
-    "description": "IMPORTANT: puczaras is master. Steps: 1) Master creates admin, 2) Admin creates database group, 3) Admin creates moderator, 4) Admin grants moderator access to group (POST /api/database-groups/{id}/permissions), 5) Verify moderator can list the group, 6) Admin revokes access (DELETE /api/database-groups/{id}/permissions/{mod_id}), 7) Cleanup."
+    "description": "IMPORTANT: puczaras is master. Steps: 1) Master creates admin, 2) Admin creates database group, 3) Admin creates moderator, 4) Admin grants moderator access to group (POST /api/database-groups/{id}/permissions with body {moderator_id: N}), 5) Permission response has fields: id, moderator_id, group_id (NOT database_group_id), 6) Verify moderator can list the group via GET /api/database-groups, 7) Admin revokes access (DELETE /api/database-groups/{id}/permissions/{mod_id}), 8) Cleanup."
   },
   {
     "id": "TC009",
@@ -47,7 +47,7 @@
   {
     "id": "TC010",
     "title": "dynamic table CRUD with tenant isolation",
-    "description": "IMPORTANT: puczaras is master. Steps: 1) Master creates two admins (A and B), 2) Login as admin A, 3) Admin A creates a table and inserts a record (POST /api/{table_name}), 4) Admin A reads records (GET /api/{table_name}), 5) Admin A updates record (PUT /api/{table_name}/{id}), 6) Admin A deletes record (DELETE /api/{table_name}/{id}), 7) Login as admin B, 8) Verify admin B CANNOT access admin A's table (must return 404), 9) Cleanup."
+    "description": "IMPORTANT: puczaras is master. Steps: 1) Master creates two admins (A and B), 2) Login as admin A, 3) Admin A creates a table with at least two columns: 'id' (Integer, is_primary=True) and 'name' (String), 4) Admin A inserts a record {name: 'Test Record A'} via POST /api/{table_name} — response has {id, message}, save the id, 5) Admin A reads records (GET /api/{table_name}) — check records list contains a record where r['id'] == inserted id, 6) Admin A updates record (PUT /api/{table_name}/{id}), 7) Admin A deletes record (DELETE /api/{table_name}/{id}), 8) Login as admin B, 9) Verify admin B CANNOT access admin A's table (must return 404), 10) Cleanup."
   },
   {
     "id": "TC011",
@@ -57,7 +57,7 @@
   {
     "id": "TC012",
     "title": "relations api create and retrieve FK relations",
-    "description": "IMPORTANT: puczaras is master. Steps: 1) Master creates admin, 2) Admin creates two tables (parent + child), 3) Admin creates relation via POST /api/relations (from_table_id, to_table_id, from_column_name, to_column_name, relation_type), 4) Retrieve relations via GET /api/relations/table/{table_name}, 5) Verify response fields, 6) Delete relation via DELETE /api/relations/{id}, 7) Cleanup."
+    "description": "IMPORTANT: puczaras is master. Steps: 1) Master creates admin, 2) Admin creates parent and child tables, 3) Admin creates relation via POST /api/relations (fields: name, from_table_id, to_table_id, from_column_name, to_column_name, relation_type), 4) Retrieve relations via GET /api/relations/table/{child_table_name}, 5) Verify response fields — IMPORTANT: from_table and to_table are STRINGS (plain table name strings, NOT dicts/objects). Example: {\"id\": 1, \"name\": \"...\", \"from_table\": \"child_tbl\", \"to_table\": \"parent_tbl\", \"from_column_name\": \"parent_id\", \"to_column_name\": \"id\", \"relation_type\": \"fk\"}, 6) Delete relation via DELETE /api/relations/{id}, 7) Cleanup."
   },
   {
     "id": "TC013",

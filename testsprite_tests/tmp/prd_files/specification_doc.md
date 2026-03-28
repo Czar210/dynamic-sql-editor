@@ -106,7 +106,7 @@ Physical `ForeignKeyConstraint` is added at table creation time only (SQLite lim
 
 Response format for `GET /api/relations/table/{table_name}`:
 ```json
-[{ "id": 1, "name": "employees_cargo_id_fk", "from_table_name": "employees", "from_column_name": "cargo_id", "to_table_name": "cargos", "to_column_name": "id", "relation_type": "many_to_one" }]
+[{ "id": 1, "name": "employees_cargo_id_fk", "from_table": "employees", "from_column_name": "cargo_id", "to_table": "cargos", "to_column_name": "id", "relation_type": "many_to_one" }]
 ```
 
 ---

@@ -2,19 +2,20 @@
 
 Este documento define a direção, a metodologia e o plano de ação contínuo do projeto **Dynamic SQL Editor** (Dynamic CMS Template).
 
-## 👥 A Equipe (Nossos Papéis)
-Nossa equipe técnica atua de forma coordenada para garantir qualidade e velocidade no desenvolvimento:
-- 🎬 **Diretor** (Você): Define a visão, os requisitos, prioriza tarefas e atua como o tomador de decisão final.
-- 🧠 **Planejador** (Antigravity): Analisa o ecossistema do projeto (Next.js + FastAPI), desenha soluções arquiteturais, escreve os planos de implementação (`implementation_plan.md`), e mantém esta pasta `planning` organizada e rastreável.
-- 💻 **Programador** (Claude): Executa o planejamento, escrevendo e refatorando o código fonte.
-- 🔬 **Testador** (TestSprite): Prepara os ambientes, elabora cenários de testes automatizados e valida a robustez das entregas do Claude antes da aprovação do Diretor.
+## 👥 A Equipe e a Metodologia (Spec-Driven Development)
+Nossa equipe técnica atua de forma coordenada utilizando o **GitHub Spec Kit** para garantir alinhamento total (Spec-Driven Development - SDD). Toda arquitetura nasce de uma especificação clara antes do código.
 
-## 🎯 Situação Atual e Metodologia
-O projeto é um Headless CMS Template Full-Stack com uma engine de DDL dinâmico orgânica. A nova metodologia visa profissionalizar o fluxo:
-1. **Planejamento:** O Diretor faz um request (ou levanta bugs). Eu (Antigravity) planejo a execução detalhada (`implementation_plan.md`), aprovo com o diretor e atualizo o backlog aqui.
-2. **Desenvolvimento:** O Programador (Claude) recebe as specs e coda exatamente o que foi arquitetado.
-3. **Validação:** TestSprite entra em ação rodando testes (unitários/integração) validando a nova release.
-4. **Deploy e Registro:** Sucesso registrado em `patch_notes.md` e `bugfixes.md`.
+- 🎬 **Diretor** (Você): Define a visão e aciona a criação/edição de especificações usando comandos como `/speckit.specify`. 
+- 🧠 **Planejador** (Antigravity): Expande as especificações em planos técnicos executáveis usando `/speckit.plan` e quebra em tarefas com `/speckit.tasks`. Atualiza o backlog aqui em `planning/`.
+- 💻 **Programador** (Claude): Executa os planos estritamente baseados na "Constituição" (`.speckit/constitution.md`) usando `/speckit.implement`.
+- 🔬 **Testador** (TestSprite): Valida a robustez das entregas do Claude antes da aprovação do Diretor.
+
+## 🎯 Fluxo de Trabalho (Workflow Spec Kit)
+O fluxo diário segue o ciclo SDD:
+1. **Specify:** O Diretor faz um request. Eu crio um spec em `.speckit/specs/` detalhando o comportamento esperado.
+2. **Plan & Task:** Transformo o spec em um plano técnico em `.speckit/plans/` e gero uma lista de tarefas em `.speckit/tasks/`.
+3. **Execute:** O Programador (Claude) lê o backlog guiado pela Constituição (`.speckit/constitution.md`) e coda.
+4. **Validação:** TestSprite roda testes validando a nova release. Sucesso é registrado no histórico de patch notes.
 
 ---
 

@@ -1,110 +1,118 @@
 import requests
+import uuid
 
 BASE_URL = "http://localhost:8000"
 TIMEOUT = 30
-
 MASTER_USERNAME = "puczaras"
 MASTER_PASSWORD = "Zup Paras"
 
 
 def test_post_api_moderators_full_lifecycle_as_admin():
     session = requests.Session()
+    headers = {"Content-Type": "application/json"}
 
-    # Step 1: Master login to get master token
-    login_master_resp = session.post(
+    # Step 1: Master login
+    master_login_payload = {"username": MASTER_USERNAME, "password": MASTER_PASSWORD}
+    resp = session.post(
         f"{BASE_URL}/api/auth/login",
-        json={"username": MASTER_USERNAME, "password": MASTER_PASSWORD},
+        json=master_login_payload,
         timeout=TIMEOUT,
+        headers=headers,
     )
-    assert login_master_resp.status_code == 200, f"Master login failed: {login_master_resp.text}"
-    master_token = login_master_resp.json().get("access_token")
-    assert master_token is not None, "No access_token in master login response"
-    master_headers = {"Authorization": f"Bearer {master_token}"}
+    assert resp.status_code == 200, f"Master login failed: {resp.text}"
+    master_token = resp.json().get("access_token")
+    assert master_token, "Master token not found"
+    master_auth_header = {"Authorization": f"Bearer {master_token}", "Content-Type": "application/json"}
 
-    # Step 1: Master creates an admin user
-    admin_username = "testadmin_tc007"
+    # Step 1: Master creates admin with unique username
+    admin_username = f"admin_{uuid.uuid4().hex[:8]}"
     admin_password = "AdminPass123!"
-    create_admin_resp = session.post(
+    create_admin_payload = {"username": admin_username, "password": admin_password}
+    resp = session.post(
         f"{BASE_URL}/api/admins",
-        headers=master_headers,
-        json={"username": admin_username, "password": admin_password},
+        json=create_admin_payload,
+        headers=master_auth_header,
         timeout=TIMEOUT,
     )
-    assert create_admin_resp.status_code == 200, f"Admin creation failed: {create_admin_resp.text}"
-    admin_data = create_admin_resp.json()
-    admin_id = admin_data.get("id")
-    assert admin_id is not None, "Admin id missing in creation response"
+    assert resp.status_code == 200, f"Master failed to create admin: {resp.text}"
+    admin_user = resp.json()
+    admin_id = admin_user.get("id")
+    assert admin_id, "Created admin user id missing"
 
     try:
-        # Step 2: Login as created admin
-        login_admin_resp = session.post(
+        # Step 2: Login as admin
+        admin_login_payload = {"username": admin_username, "password": admin_password}
+        resp = session.post(
             f"{BASE_URL}/api/auth/login",
-            json={"username": admin_username, "password": admin_password},
+            json=admin_login_payload,
+            headers=headers,
             timeout=TIMEOUT,
         )
-        assert login_admin_resp.status_code == 200, f"Admin login failed: {login_admin_resp.text}"
-        admin_token = login_admin_resp.json().get("access_token")
-        assert admin_token is not None, "No access_token in admin login response"
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        assert resp.status_code == 200, f"Admin login failed: {resp.text}"
+        admin_token = resp.json().get("access_token")
+        assert admin_token, "Admin token not found"
+        admin_auth_header = {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}
 
-        # Step 3: Admin creates a moderator
-        mod_username = "testmoderator_tc007"
+        # Step 3: Admin creates moderator
+        mod_username = f"moderator_{uuid.uuid4().hex[:8]}"
         mod_password = "ModPass123!"
-        create_mod_resp = session.post(
+        create_mod_payload = {"username": mod_username, "password": mod_password}
+        resp = session.post(
             f"{BASE_URL}/api/moderators",
-            headers=admin_headers,
-            json={"username": mod_username, "password": mod_password},
+            json=create_mod_payload,
+            headers=admin_auth_header,
             timeout=TIMEOUT,
         )
-        assert create_mod_resp.status_code == 200, f"Moderator creation failed: {create_mod_resp.text}"
-        mod_data = create_mod_resp.json()
-        mod_id = mod_data.get("id")
-        assert mod_id is not None, "Moderator id missing in creation response"
+        assert resp.status_code == 200, f"Admin failed to create moderator: {resp.text}"
+        mod_user = resp.json()
+        mod_id = mod_user.get("id")
+        assert mod_id, "Created moderator user id missing"
 
         try:
             # Step 4: Admin lists moderators
-            list_mods_resp = session.get(
+            resp = session.get(
                 f"{BASE_URL}/api/moderators",
-                headers=admin_headers,
+                headers=admin_auth_header,
                 timeout=TIMEOUT,
             )
-            assert list_mods_resp.status_code == 200, f"List moderators failed: {list_mods_resp.text}"
-            mods_list = list_mods_resp.json()
-            assert any(m.get("id") == mod_id for m in mods_list), "Created moderator not found in list"
+            assert resp.status_code == 200, f"Admin failed to list moderators: {resp.text}"
+            moderators = resp.json()
+            assert any(m.get("id") == mod_id for m in moderators), "Moderator not found in list"
 
             # Step 5: Admin resets moderator password
-            new_password = "NewModPass123!"
-            reset_pass_resp = session.post(
+            new_password = "NewModPass456!"
+            reset_password_payload = {"new_password": new_password}
+            resp = session.post(
                 f"{BASE_URL}/api/moderators/{mod_id}/reset-password",
-                headers=admin_headers,
-                json={"new_password": new_password},
+                json=reset_password_payload,
+                headers=admin_auth_header,
                 timeout=TIMEOUT,
             )
-            assert reset_pass_resp.status_code == 200, f"Reset password failed: {reset_pass_resp.text}"
-            reset_msg = reset_pass_resp.json().get("message")
-            assert reset_msg, "Reset password response missing message"
+            assert resp.status_code == 200, f"Failed to reset moderator password: {resp.text}"
+            msg = resp.json().get("message")
+            assert isinstance(msg, str) and msg, "Reset password message missing or empty"
 
         finally:
             # Step 6: Admin deletes moderator
-            delete_mod_resp = session.delete(
+            resp = session.delete(
                 f"{BASE_URL}/api/moderators/{mod_id}",
-                headers=admin_headers,
+                headers=admin_auth_header,
                 timeout=TIMEOUT,
             )
-            assert delete_mod_resp.status_code == 200, f"Delete moderator failed: {delete_mod_resp.text}"
-            delete_msg = delete_mod_resp.json().get("message")
-            assert delete_msg, "Delete moderator response missing message"
+            assert resp.status_code == 200, f"Failed to delete moderator: {resp.text}"
+            msg = resp.json().get("message")
+            assert isinstance(msg, str) and msg, "Delete moderator message missing or empty"
 
     finally:
-        # Cleanup: Master deletes the created admin
-        delete_admin_resp = session.delete(
+        # Cleanup: Master deletes admin
+        resp = session.delete(
             f"{BASE_URL}/api/admins/{admin_id}",
-            headers=master_headers,
+            headers=master_auth_header,
             timeout=TIMEOUT,
         )
-        assert delete_admin_resp.status_code == 200, f"Delete admin failed: {delete_admin_resp.text}"
-        delete_admin_msg = delete_admin_resp.json().get("message")
-        assert delete_admin_msg, "Delete admin response missing message"
+        assert resp.status_code == 200, f"Failed to delete admin: {resp.text}"
+        msg = resp.json().get("message")
+        assert isinstance(msg, str) and msg, "Delete admin message missing or empty"
 
 
 test_post_api_moderators_full_lifecycle_as_admin()

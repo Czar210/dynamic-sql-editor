@@ -1,20 +1,20 @@
 {
   "status": "commited",
-  "type": "backend",
+  "type": "frontend",
   "scope": "codebase",
-  "localEndpoint": "http://localhost:8000",
+  "localEndpoint": "http://localhost:3000",
   "backendAuthType": "Bearer token",
   "backendCredential": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJwdWN6YXJhcyIsInJvbGUiOiJtYXN0ZXIiLCJpZCI6MSwiZXhwIjoxNzc1MTczMjE2fQ.D-ndmBBzrwDgTxzn6n-s9Y6EFNUa0DLyjhWvPFEqWdo",
   "executionArgs": {
     "projectName": "dynamic-sql-editor",
     "projectPath": "c:\\Users\\cesar\\Documents\\GitHub\\dynamic-sql-editor",
     "testIds": [],
-    "additionalInstruction": "Login endpoint now accepts BOTH application/json (json= parameter) AND application/x-www-form-urlencoded (data= parameter). Use requests.post(url, json={\"username\": \"...\", \"password\": \"...\"}) for all login calls — this is fully supported. Master credentials: username=puczaras, password=Zup Paras. Test all features: auth, roles, dynamic tables, CRUD, SQL import dry-run, CSV import (not XLSX), public API, relations.",
+    "additionalInstruction": "Frontend is at http://localhost:3000. Backend API is at http://localhost:8000. Login: username=puczaras, password=Zup Paras (role=master). For admin-specific UI (tables/moderators/groups/import), first create an admin via POST http://localhost:8000/api/admins as master, then login as that admin on the frontend. Admin panel at /admin, login at /login, public explorer at /explore.",
     "serverMode": "development",
     "envs": {
       "API_KEY": "sk-user-QUosImtjfNW6CqNROfRPTvl_2F9AfUMyDCa-zRwrfPuPVwsa_yCAxXQpQRm_ABXBqMCgV2tkT4FVhoXXOviZBPgO40ogAeo8foKsnZ4ka5Klwhru-Vfxwzur-BaBJrqIQcE"
     }
   },
-  "serverPort": 57282,
-  "proxy": "http://8eadaf41-dc62-412d-b6e3-5c0bed8fd341:sfPKvp1SWyWp5btpfZz0rVhAPXN03SAN@tun.testsprite.com:8080"
+  "serverPort": 58520,
+  "proxy": "http://7a4842b2-382c-44f8-a913-7afefac21c40:QxRIBx0H0pFUWdLA9BhlLMptndCJhpe0@tun.testsprite.com:8080"
 }

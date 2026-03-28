@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional
 from datetime import datetime
 
@@ -56,7 +56,7 @@ class PermissionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     moderator_id: int
-    database_group_id: int
+    group_id: int = Field(validation_alias='database_group_id')
 
 # Schema for Columns
 class ColumnBase(BaseModel):
@@ -117,8 +117,8 @@ class RelationInfo(BaseModel):
     """Lightweight relation info returned alongside table data in the DataViewer."""
     id: int
     name: str
-    from_table_name: str
+    from_table: str
     from_column_name: str
-    to_table_name: str
+    to_table: str
     to_column_name: str
     relation_type: str

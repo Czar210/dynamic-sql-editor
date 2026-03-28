@@ -1,29 +1,24 @@
 import requests
 
-BASE_URL = "http://localhost:8000"
-
 def test_post_api_auth_login_with_invalid_credentials():
-    url = f"{BASE_URL}/api/auth/login"
+    base_url = "http://localhost:8000"
+    url = f"{base_url}/api/auth/login"
+    headers = {"Content-Type": "application/json"}
     payload = {
         "username": "puczaras",
-        "password": "WrongPassword123!"
-    }
-    headers = {
-        "Content-Type": "application/json"
+        "password": "wrongpassword"
     }
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=30)
     except requests.RequestException as e:
         assert False, f"Request failed: {e}"
 
-    assert response.status_code == 401, f"Expected status code 401, got {response.status_code}"
-    # Optionally could check response text or json for "Invalid credentials"
+    assert response.status_code == 401, f"Expected 401 Unauthorized but got {response.status_code}"
+    # Optionally check response content for error message if exists:
     try:
-        resp_json = response.json()
-        assert isinstance(resp_json, dict), "Response is not a JSON object"
-        # Possibly check for error message in response body if present
+        error_content = response.json()
+        assert isinstance(error_content, dict)
     except Exception:
-        # If response not JSON, it's still acceptable for error
         pass
 
 test_post_api_auth_login_with_invalid_credentials()

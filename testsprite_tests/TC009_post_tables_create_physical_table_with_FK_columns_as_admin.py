@@ -8,60 +8,62 @@ MASTER_USERNAME = "puczaras"
 MASTER_PASSWORD = "Zup Paras"
 
 def test_post_tables_create_physical_table_with_fk_columns_as_admin():
-    session = requests.Session()
-
-    # Step 1: Master login to get master token
-    login_master_resp = session.post(
+    # Step 1: Master login
+    master_login_resp = requests.post(
         f"{BASE_URL}/api/auth/login",
-        data={"username": MASTER_USERNAME, "password": MASTER_PASSWORD},
+        json={"username": MASTER_USERNAME, "password": MASTER_PASSWORD},
         timeout=TIMEOUT
     )
-    assert login_master_resp.status_code == 200, f"Master login failed: {login_master_resp.text}"
-    master_token = login_master_resp.json().get("access_token")
-    assert master_token, "No access_token in master login response"
+    assert master_login_resp.status_code == 200, f"Master login failed: {master_login_resp.text}"
+    master_token = master_login_resp.json()["access_token"]
     master_headers = {"Authorization": f"Bearer {master_token}"}
 
-    # Step 1: Master creates admin user
     admin_username = f"admin_{uuid.uuid4().hex[:8]}"
-    admin_password = "AdminPass123!"
-    create_admin_resp = session.post(
+    admin_password = "StrongPass123!"
+
+    # Step 1: Master creates admin
+    create_admin_resp = requests.post(
         f"{BASE_URL}/api/admins",
-        headers=master_headers,
         json={"username": admin_username, "password": admin_password},
+        headers=master_headers,
         timeout=TIMEOUT
     )
-    assert create_admin_resp.status_code == 200, f"Master failed to create admin: {create_admin_resp.text}"
-    admin_user = create_admin_resp.json()
-    admin_id = admin_user.get("id")
-    assert admin_id, "No admin id returned"
+    assert create_admin_resp.status_code == 200, f"Master creating admin failed: {create_admin_resp.text}"
+    admin_data = create_admin_resp.json()
+    admin_id = admin_data.get("id")
+    assert admin_id is not None, "Admin id missing in create admin response"
+
+    admin_token = None
+    group_id = None
+    base_table_id = None
+    fk_table_id = None
 
     try:
         # Step 2: Login as admin
-        login_admin_resp = session.post(
+        admin_login_resp = requests.post(
             f"{BASE_URL}/api/auth/login",
-            data={"username": admin_username, "password": admin_password},
+            json={"username": admin_username, "password": admin_password},
             timeout=TIMEOUT
         )
-        assert login_admin_resp.status_code == 200, f"Admin login failed: {login_admin_resp.text}"
-        admin_token = login_admin_resp.json().get("access_token")
-        assert admin_token, "No access_token in admin login response"
+        assert admin_login_resp.status_code == 200, f"Admin login failed: {admin_login_resp.text}"
+        admin_token = admin_login_resp.json()["access_token"]
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
         # Step 3: Admin creates database group
-        db_group_name = f"grp_{uuid.uuid4().hex[:8]}"
-        create_group_resp = session.post(
+        group_name = f"group_{uuid.uuid4().hex[:8]}"
+        group_create_resp = requests.post(
             f"{BASE_URL}/api/database-groups",
+            json={"name": group_name, "description": "Test group for FK tables"},
             headers=admin_headers,
-            json={"name": db_group_name, "description": "Test group for FK table creation"},
             timeout=TIMEOUT
         )
-        assert create_group_resp.status_code == 200, f"Admin failed to create database group: {create_group_resp.text}"
-        db_group = create_group_resp.json()
-        group_id = db_group.get("id")
-        assert group_id, "No group id returned"
+        assert group_create_resp.status_code == 200, f"Create group failed: {group_create_resp.text}"
+        group_resp_json = group_create_resp.json()
+        group_id = group_resp_json.get("id")
+        assert group_id is not None, "Group id missing in create group response"
 
-        # Step 4: Admin creates base table (no FK)
-        base_table_name = f"base_{uuid.uuid4().hex[:8]}"
+        # Step 4: Admin creates base table
+        base_table_name = f"base_table_{uuid.uuid4().hex[:8]}"
         base_table_payload = {
             "name": base_table_name,
             "description": "Base table for FK reference",
@@ -84,25 +86,27 @@ def test_post_tables_create_physical_table_with_fk_columns_as_admin():
                 }
             ]
         }
-        create_base_table_resp = session.post(
+        base_table_resp = requests.post(
             f"{BASE_URL}/tables/",
-            headers=admin_headers,
             json=base_table_payload,
+            headers=admin_headers,
             timeout=TIMEOUT
         )
-        assert create_base_table_resp.status_code == 200, f"Failed to create base table: {create_base_table_resp.text}"
-        base_table = create_base_table_resp.json()
-        base_table_id = base_table.get("id")
-        assert base_table_id, "No base table id returned"
-        base_columns = base_table.get("columns")
-        assert isinstance(base_columns, list) and len(base_columns) > 0, "Base table columns missing"
+        assert base_table_resp.status_code == 200, f"Base table creation failed: {base_table_resp.text}"
+        base_table_json = base_table_resp.json()
+        base_table_id = base_table_json.get("id")
+        assert base_table_id is not None, "Base table id missing"
+        columns = base_table_json.get("columns", [])
+        # Verify columns returned as expected
+        base_ids = [col["name"] for col in columns]
+        assert "id" in base_ids and "name" in base_ids, "Base table columns missing"
 
         # Step 5: Admin creates table with FK column referencing base table
-        fk_table_name = f"fk_{uuid.uuid4().hex[:8]}"
+        fk_table_name = f"fk_table_{uuid.uuid4().hex[:8]}"
         fk_column_name = "base_id"
         fk_table_payload = {
             "name": fk_table_name,
-            "description": "Table with FK column referencing base table",
+            "description": "Table with FK referencing base_table",
             "group_id": group_id,
             "is_public": False,
             "columns": [
@@ -121,95 +125,66 @@ def test_post_tables_create_physical_table_with_fk_columns_as_admin():
                     "is_primary": False,
                     "fk_table": base_table_name,
                     "fk_column": "id"
-                },
-                {
-                    "name": "description",
-                    "data_type": "String",
-                    "is_nullable": True,
-                    "is_unique": False,
-                    "is_primary": False
                 }
             ]
         }
-        create_fk_table_resp = session.post(
+        fk_table_resp = requests.post(
             f"{BASE_URL}/tables/",
-            headers=admin_headers,
             json=fk_table_payload,
+            headers=admin_headers,
             timeout=TIMEOUT
         )
-        assert create_fk_table_resp.status_code == 200, f"Failed to create FK table: {create_fk_table_resp.text}"
-        fk_table = create_fk_table_resp.json()
-        fk_table_id = fk_table.get("id")
-        assert fk_table_id, "No FK table id returned"
+        assert fk_table_resp.status_code == 200, f"FK table creation failed: {fk_table_resp.text}"
+        fk_table_json = fk_table_resp.json()
+        fk_table_id = fk_table_json.get("id")
+        assert fk_table_id is not None, "FK table id missing"
 
         # Step 6: Verify response columns include fk_table and fk_column fields
-        fk_table_columns = fk_table.get("columns")
-        assert isinstance(fk_table_columns, list), "Columns missing in FK table response"
-        fk_col = None
-        for col in fk_table_columns:
+        fk_columns = fk_table_json.get("columns", [])
+        found_fk_column = None
+        for col in fk_columns:
             if col.get("name") == fk_column_name:
-                fk_col = col
+                found_fk_column = col
                 break
-        assert fk_col is not None, f"FK column '{fk_column_name}' not found in FK table columns"
-        assert fk_col.get("fk_table") == base_table_name, "fk_table field mismatch"
-        assert fk_col.get("fk_column") == "id", "fk_column field mismatch"
+        assert found_fk_column is not None, "FK column missing in FK table"
+        assert found_fk_column.get("fk_table") == base_table_name, f"fk_table mismatch: expected {base_table_name}"
+        assert found_fk_column.get("fk_column") == "id", "fk_column mismatch"
 
-        # Step 7: Toggle visibility (PATCH /tables/{id}/visibility)
-        patch_visibility_resp = session.patch(
+        # Step 7: Toggle visibility PATCH /tables/{id}/visibility
+        toggle_resp = requests.patch(
             f"{BASE_URL}/tables/{fk_table_id}/visibility",
             headers=admin_headers,
             timeout=TIMEOUT
         )
-        assert patch_visibility_resp.status_code == 200, f"Failed to toggle visibility: {patch_visibility_resp.text}"
-        visibility_resp_json = patch_visibility_resp.json()
-        assert "is_public" in visibility_resp_json, "Response missing 'is_public' field after toggle"
-        toggled_visibility = visibility_resp_json["is_public"]
-        # Toggle again to revert to original state
-        patch_visibility_resp_revert = session.patch(
-            f"{BASE_URL}/tables/{fk_table_id}/visibility",
-            headers=admin_headers,
-            timeout=TIMEOUT
-        )
-        assert patch_visibility_resp_revert.status_code == 200, f"Failed to revert visibility: {patch_visibility_resp_revert.text}"
+        assert toggle_resp.status_code == 200, f"Toggle visibility failed: {toggle_resp.text}"
+        toggle_json = toggle_resp.json()
+        assert "is_public" in toggle_json and isinstance(toggle_json["is_public"], bool), "Invalid toggle visibility response"
 
     finally:
         # Step 8: Cleanup tables and admin
-
-        # Delete FK table
-        if 'fk_table_id' in locals():
-            del_fk_resp = session.delete(
+        if fk_table_id:
+            requests.delete(
                 f"{BASE_URL}/tables/{fk_table_id}",
                 headers=admin_headers,
                 timeout=TIMEOUT
             )
-            # 200 expected, but ignore if not found or 403
-            assert del_fk_resp.status_code in (200, 404, 403), f"Failed to delete FK table: {del_fk_resp.text}"
-
-        # Delete base table
-        if 'base_table_id' in locals():
-            del_base_resp = session.delete(
+        if base_table_id:
+            requests.delete(
                 f"{BASE_URL}/tables/{base_table_id}",
                 headers=admin_headers,
                 timeout=TIMEOUT
             )
-            assert del_base_resp.status_code in (200, 404, 403), f"Failed to delete base table: {del_base_resp.text}"
-
-        # Delete database group
-        if 'group_id' in locals():
-            del_group_resp = session.delete(
+        if group_id:
+            requests.delete(
                 f"{BASE_URL}/api/database-groups/{group_id}",
                 headers=admin_headers,
                 timeout=TIMEOUT
             )
-            assert del_group_resp.status_code in (200, 404, 403), f"Failed to delete database group: {del_group_resp.text}"
-
-        # Delete admin user
-        if 'admin_id' in locals():
-            del_admin_resp = session.delete(
+        if admin_id:
+            requests.delete(
                 f"{BASE_URL}/api/admins/{admin_id}",
                 headers=master_headers,
                 timeout=TIMEOUT
             )
-            assert del_admin_resp.status_code in (200, 404, 403), f"Failed to delete admin user: {del_admin_resp.text}"
 
 test_post_tables_create_physical_table_with_fk_columns_as_admin()

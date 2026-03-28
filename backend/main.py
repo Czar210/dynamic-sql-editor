@@ -479,9 +479,9 @@ def get_relations_for_table(table_name: str, db: Session = Depends(get_db), curr
             result.append(schemas.RelationInfo(
                 id=r.id,
                 name=r.name,
-                from_table_name=db_table.name,
+                from_table=db_table.name,
                 from_column_name=r.from_column_name,
-                to_table_name=to_table.name,
+                to_table=to_table.name,
                 to_column_name=r.to_column_name,
                 relation_type=r.relation_type,
             ))
@@ -503,8 +503,13 @@ def toggle_table_visibility(table_id: int, db: Session = Depends(get_db), curren
         raise HTTPException(status_code=404, detail="Table not found")
     if current_user.role != "master" and table.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not your table")
-    table.is_public = not table.is_public
-    db.commit()
+    try:
+        table.is_public = not bool(table.is_public)
+        db.commit()
+        db.refresh(table)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update visibility: {str(e)}")
     return {"is_public": table.is_public}
 
 # ==========================================

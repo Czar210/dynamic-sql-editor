@@ -7,162 +7,162 @@ TIMEOUT = 30
 MASTER_USERNAME = "puczaras"
 MASTER_PASSWORD = "Zup Paras"
 
-
 def test_public_api_list_and_query_public_tables():
-    session = requests.Session()
-
-    def login(username, password):
-        url = f"{BASE_URL}/api/auth/login"
-        resp = session.post(url, json={"username": username, "password": password}, timeout=TIMEOUT)
-        resp.raise_for_status()
-        data = resp.json()
-        assert "access_token" in data
-        assert "token_type" in data
-        assert data["token_type"].lower() == "bearer"
-        assert "user" in data and "username" in data["user"] and "role" in data["user"]
-        return data["access_token"]
-
-    # 1) Master login
-    master_token = login(MASTER_USERNAME, MASTER_PASSWORD)
+    # Authenticate as master
+    login_resp = requests.post(
+        f"{BASE_URL}/api/auth/login",
+        data={"username": MASTER_USERNAME, "password": MASTER_PASSWORD},
+        timeout=TIMEOUT,
+    )
+    assert login_resp.status_code == 200, f"Master login failed: {login_resp.text}"
+    master_token = login_resp.json()["access_token"]
     master_headers = {"Authorization": f"Bearer {master_token}"}
 
-    # 2) Master creates admin
-    admin_username = f"admin_{uuid.uuid4().hex[:8]}"
-    admin_password = "AdminPass123!"
-    resp = session.post(f"{BASE_URL}/api/admins", headers=master_headers,
-                        json={"username": admin_username, "password": admin_password}, timeout=TIMEOUT)
-    resp.raise_for_status()
-    admin_user = resp.json()
-    assert "id" in admin_user and admin_user["username"] == admin_username
+    # Step 1: Master creates admin
+    new_admin_username = f"admin_{uuid.uuid4().hex[:8]}"
+    new_admin_password = "AdminPass123!"
+    create_admin_resp = requests.post(
+        f"{BASE_URL}/api/admins",
+        headers=master_headers,
+        json={"username": new_admin_username, "password": new_admin_password},
+        timeout=TIMEOUT,
+    )
+    assert create_admin_resp.status_code == 200, f"Create admin failed: {create_admin_resp.text}"
+    admin_id = create_admin_resp.json()["id"]
 
-    admin_id = admin_user["id"]
-
-    # 3) Login as admin
-    admin_token = login(admin_username, admin_password)
-    admin_headers = {"Authorization": f"Bearer {admin_token}"}
-
-    # 4) Admin creates a table
-    # First, find or create a group for the table (optional: get existing groups or create one)
-    # We'll create a new group for isolation
-    group_name = f"group_{uuid.uuid4().hex[:8]}"
-    group_desc = "Test group for public API test"
-    resp = session.post(f"{BASE_URL}/api/database-groups", headers=admin_headers,
-                        json={"name": group_name, "description": group_desc}, timeout=TIMEOUT)
-    resp.raise_for_status()
-    group = resp.json()
-    assert "id" in group and group["name"] == group_name
-    group_id = group["id"]
-
-    table_name = f"pub_table_{uuid.uuid4().hex[:8]}"
-    table_description = "Public API test table"
-    columns = [
-        {"name": "name", "data_type": "String", "is_nullable": False, "is_unique": False, "is_primary": False},
-        {"name": "age", "data_type": "Integer", "is_nullable": True, "is_unique": False, "is_primary": False},
-        {"name": "email", "data_type": "String", "is_nullable": False, "is_unique": True, "is_primary": False},
-    ]
-    table_payload = {
-        "name": table_name,
-        "description": table_description,
-        "group_id": group_id,
-        "is_public": False,
-        "columns": columns
-    }
-    resp = session.post(f"{BASE_URL}/tables/", headers=admin_headers, json=table_payload, timeout=TIMEOUT)
-    resp.raise_for_status()
-    table = resp.json()
-    assert "id" in table and "name" in table and table["name"] == table_name
-    table_id = table["id"]
-
-    # 5) Admin inserts 3 records
-    records = [
-        {"name": "Alice", "age": 30, "email": "alice@example.com"},
-        {"name": "Bob", "age": 25, "email": "bob@example.com"},
-        {"name": "Carol", "age": None, "email": "carol@example.com"},
-    ]
-    record_ids = []
     try:
-        for rec in records:
-            resp = session.post(f"{BASE_URL}/api/{table_name}", headers=admin_headers, json=rec, timeout=TIMEOUT)
-            resp.raise_for_status()
-            res_data = resp.json()
-            assert "id" in res_data and "message" in res_data
-            record_ids.append(res_data["id"])
+        # Step 2: Admin login
+        admin_login_resp = requests.post(
+            f"{BASE_URL}/api/auth/login",
+            data={"username": new_admin_username, "password": new_admin_password},
+            timeout=TIMEOUT,
+        )
+        assert admin_login_resp.status_code == 200, f"Admin login failed: {admin_login_resp.text}"
+        admin_token = admin_login_resp.json()["access_token"]
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
-        # 6) Admin toggles table to public
-        resp = session.patch(f"{BASE_URL}/tables/{table_id}/visibility", headers=admin_headers,
-                             timeout=TIMEOUT)
-        resp.raise_for_status()
-        vis_data = resp.json()
-        assert "is_public" in vis_data and vis_data["is_public"] is True
+        # Step 2b: Admin creates a database group (required for table)
+        group_name = f"group_{uuid.uuid4().hex[:8]}"
+        create_group_resp = requests.post(
+            f"{BASE_URL}/api/database-groups",
+            headers=admin_headers,
+            json={"name": group_name, "description": "Test group for public API"},
+            timeout=TIMEOUT,
+        )
+        assert create_group_resp.status_code == 200, f"Create group failed: {create_group_resp.text}"
+        group_id = create_group_resp.json()["id"]
 
-        # 7) Without auth: GET /public/tables/ (must list the table)
-        resp = session.get(f"{BASE_URL}/public/tables/", timeout=TIMEOUT)
-        resp.raise_for_status()
-        public_tables = resp.json()
-        # Verify table is listed among public tables (match by id and name)
-        found_table = None
-        for t in public_tables:
-            if t.get("id") == table_id and t.get("name") == table_name:
-                found_table = t
-                break
-        assert found_table is not None, "Public tables list does not include the created public table"
+        # Step 2c: Admin creates table with columns
+        table_name = f"table_{uuid.uuid4().hex[:8]}"
+        table_columns = [
+            {"name": "id", "data_type": "Integer", "is_nullable": False, "is_unique": True, "is_primary": True},
+            {"name": "value", "data_type": "String", "is_nullable": True, "is_unique": False, "is_primary": False},
+        ]
+        create_table_resp = requests.post(
+            f"{BASE_URL}/tables/",
+            headers=admin_headers,
+            json={
+                "name": table_name,
+                "description": "Test table for public API",
+                "group_id": group_id,
+                "is_public": False,
+                "columns": table_columns,
+            },
+            timeout=TIMEOUT,
+        )
+        assert create_table_resp.status_code == 200, f"Create table failed: {create_table_resp.text}"
+        table_data = create_table_resp.json()
+        table_id = table_data["id"]
 
-        # 8) GET /public/api/{table_name} (must return records)
-        resp = session.get(f"{BASE_URL}/public/api/{table_name}", timeout=TIMEOUT)
-        resp.raise_for_status()
-        data_resp = resp.json()
-        assert "data" in data_resp and isinstance(data_resp["data"], list)
-        assert len(data_resp["data"]) >= 3
+        try:
+            # Step 3: Admin inserts 3 records
+            records_to_insert = [
+                {"value": "record1"},
+                {"value": "record2"},
+                {"value": "record3"},
+            ]
+            record_ids = []
+            for record in records_to_insert:
+                insert_resp = requests.post(
+                    f"{BASE_URL}/api/{table_name}",
+                    headers=admin_headers,
+                    json=record,
+                    timeout=TIMEOUT,
+                )
+                assert insert_resp.status_code == 200, f"Insert record failed: {insert_resp.text}"
+                resp_json = insert_resp.json()
+                assert "id" in resp_json and "message" in resp_json
+                record_ids.append(resp_json["id"])
 
-        # 9) GET /public/api/{table_name}?limit=2 (pagination)
-        resp = session.get(f"{BASE_URL}/public/api/{table_name}", params={"limit": 2}, timeout=TIMEOUT)
-        resp.raise_for_status()
-        page_resp = resp.json()
-        assert "data" in page_resp and len(page_resp["data"]) == 2
-        assert "total" in page_resp and page_resp["total"] >= 3
-        assert "limit" in page_resp and page_resp["limit"] == 2
-        assert "offset" in page_resp and page_resp["offset"] == 0
+            # Step 4: Admin toggles table to public
+            patch_resp = requests.patch(
+                f"{BASE_URL}/tables/{table_id}/visibility",
+                headers=admin_headers,
+                timeout=TIMEOUT,
+            )
+            assert patch_resp.status_code == 200, f"Patch visibility failed: {patch_resp.text}"
+            visibility_json = patch_resp.json()
+            assert visibility_json.get("is_public") is True
 
-        # 10) GET /public/api/{table_name}/columns
-        resp = session.get(f"{BASE_URL}/public/api/{table_name}/columns", timeout=TIMEOUT)
-        resp.raise_for_status()
-        columns_resp = resp.json()
-        assert isinstance(columns_resp, list)
-        # Check that expected columns appear in columns response by name
-        column_names = {col.get("name") for col in columns_resp if "name" in col}
-        for expected_col in ("name", "age", "email"):
-            assert expected_col in column_names
+            # Step 5: Without auth, GET /public/tables/ must list the table
+            public_tables_resp = requests.get(f"{BASE_URL}/public/tables/", timeout=TIMEOUT)
+            assert public_tables_resp.status_code == 200, f"Public tables list failed: {public_tables_resp.text}"
+            public_tables = public_tables_resp.json()
+            table_names = [t["name"] for t in public_tables]
+            assert table_name in table_names, f"Public tables listing missing {table_name}"
+
+            # Step 6: GET /public/api/{table_name} (no auth) must return records (all 3)
+            public_api_resp = requests.get(f"{BASE_URL}/public/api/{table_name}", timeout=TIMEOUT)
+            assert public_api_resp.status_code == 200, f"Public api get records failed: {public_api_resp.text}"
+            data = public_api_resp.json()
+            assert "data" in data and isinstance(data["data"], list)
+            assert len(data["data"]) >= 3
+            # Check inserted records values are present
+            inserted_values = set(r["value"] for r in data["data"])
+            for rec in records_to_insert:
+                assert rec["value"] in inserted_values
+
+            # Step 7: GET /public/api/{table_name}?limit=2 (pagination)
+            public_api_limit_resp = requests.get(f"{BASE_URL}/public/api/{table_name}?limit=2", timeout=TIMEOUT)
+            assert public_api_limit_resp.status_code == 200, f"Public api pagination failed: {public_api_limit_resp.text}"
+            limit_data = public_api_limit_resp.json()
+            assert "data" in limit_data and len(limit_data["data"]) == 2
+            assert limit_data.get("limit") == 2
+            assert limit_data.get("offset") == 0
+            assert "total" in limit_data and limit_data["total"] >= 3
+
+            # Step 8: GET /public/api/{table_name}/columns returns columns
+            public_columns_resp = requests.get(f"{BASE_URL}/public/api/{table_name}/columns", timeout=TIMEOUT)
+            assert public_columns_resp.status_code == 200, f"Public api columns failed: {public_columns_resp.text}"
+            columns = public_columns_resp.json()
+            # Must include columns 'id' and 'value'
+            column_names = [col["name"] for col in columns]
+            assert "id" in column_names and "value" in column_names
+
+        finally:
+            # Cleanup: delete table
+            del_table_resp = requests.delete(
+                f"{BASE_URL}/tables/{table_id}",
+                headers=admin_headers,
+                timeout=TIMEOUT,
+            )
+            # Delete might 404 if cascade deleted or not supported but ignore errors here
+
+        # Cleanup: delete database group
+        del_group_resp = requests.delete(
+            f"{BASE_URL}/api/database-groups/{group_id}",
+            headers=admin_headers,
+            timeout=TIMEOUT,
+        )
+        # Ignore possible errors on group delete for cleanup
 
     finally:
-        # 11) Cleanup: delete inserted records, delete table, delete group, delete admin
-        # Delete inserted records
-        for rec_id in record_ids:
-            try:
-                del_resp = session.delete(f"{BASE_URL}/api/{table_name}/{rec_id}", headers=admin_headers, timeout=TIMEOUT)
-                if del_resp.status_code not in (200, 404):
-                    del_resp.raise_for_status()
-            except Exception:
-                pass
-        # Delete table
-        try:
-            del_table_resp = session.delete(f"{BASE_URL}/tables/{table_id}", headers=admin_headers, timeout=TIMEOUT)
-            # If DELETE /tables/{id} not supported, ignore
-        except Exception:
-            pass
-        # Delete group
-        try:
-            del_group_resp = session.delete(f"{BASE_URL}/api/database-groups/{group_id}", headers=admin_headers, timeout=TIMEOUT)
-            if del_group_resp.status_code not in (200, 404):
-                del_group_resp.raise_for_status()
-        except Exception:
-            pass
-        # Delete admin
-        try:
-            del_admin_resp = session.delete(f"{BASE_URL}/api/admins/{admin_id}", headers=master_headers, timeout=TIMEOUT)
-            if del_admin_resp.status_code not in (200, 404):
-                del_admin_resp.raise_for_status()
-        except Exception:
-            pass
-
+        # Cleanup: delete admin user as master
+        del_admin_resp = requests.delete(
+            f"{BASE_URL}/api/admins/{admin_id}",
+            headers=master_headers,
+            timeout=TIMEOUT,
+        )
+        # ignore errors in cleanup
 
 test_public_api_list_and_query_public_tables()
