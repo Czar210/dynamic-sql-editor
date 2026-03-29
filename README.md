@@ -1,39 +1,65 @@
-# 🌍 Dynamic CMS Template (Next.js + FastAPI)
-
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-
-A **fully open-source**, production-ready Headless CMS template that lets you dynamically create database tables, CRUD interfaces, and public dashboards — all from a sleek admin panel. No placeholders — every schema you design in the UI becomes a **real physical table** in your database.
-
-## ✨ Features
-
-- **Dynamic Table Builder** — Create database tables visually with typed columns (String, Integer, Float, Boolean, DateTime).
-- **Multi-Tenant Architecture** — Each admin gets tenant-isolated tables. Moderator accounts for clients.
-- **JWT Authentication** — Secure login with role-based access (Admin / Moderator).
-- **Customizable Theming** — 6 accent colors × 4 modes (Dark, Light, Dusk, Dawn), saved per user.
-- **SQL Script Import** — Upload `.sql` dumps (CREATE TABLE + INSERT) directly from the admin panel.
-- **CSV / XLSX Import** — Populate existing tables by uploading spreadsheets.
-- **Public / Private Toggle** — Expose specific tables as public read-only APIs with one click.
-- **Interactive Dashboard** — Drag-and-drop widgets with chart and table visualizations (exportable as PDF/JPEG/CSV/Excel).
-
-## 🏗 Architecture
+<div align="center">
 
 ```
-├── frontend/          → Next.js 14+ (App Router, Tailwind CSS 4, Framer Motion)
-│   ├── src/app/       → Pages: login, admin, dashboard, public views
-│   └── src/components → AuthContext, ThemeContext, ThemeSwitcher, Widgets
+  /\   /\
+ ( ◉ v ◉)
+  (      )
+ __)    (__
+    \__/
+```
+
+# Atlas
+
+*Headless CMS open-source para painéis administrativos modernos.*
+
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-c084fc?style=flat-square&logo=opensourceinitiative&logoColor=white)](https://opensource.org/licenses/Apache-2.0)
+[![Built with intention](https://img.shields.io/badge/Built%20with-Inten%C3%A7%C3%A3o-5eead4?style=flat-square)](manifesto.md)
+[![Mora Org](https://img.shields.io/badge/Mora-Org-fb7185?style=flat-square)](https://github.com/Mora-Org)
+
+</div>
+
+---
+
+Atlas é um template open-source que deixa você criar tabelas no banco de dados, interfaces CRUD e dashboards públicos diretamente pelo painel admin — sem boilerplate. Cada schema que você define na UI vira uma **tabela física real** no seu banco.
+
+Sinta-se livre para criar seu fork. Seguimos as convenções da licença [Apache 2.0](LICENSE).
+
+---
+
+## Funcionalidades
+
+- **Table Builder visual** — Crie tabelas com colunas tipadas (String, Integer, Float, Boolean, DateTime) sem escrever SQL.
+- **Multi-tenant** — Cada admin tem tabelas isoladas com prefixo. Moderadores para clientes.
+- **3 níveis de acesso** — Hierarquia `master` → `admin` → `moderador` com permissões granulares por tabela.
+- **JWT + QR Auth** — Login com senha ou autorizando via QR Code em dispositivo já logado.
+- **Temas** — 6 cores de destaque × 4 modos (Dark, Light, Dusk, Dawn), salvo por usuário.
+- **Import SQL / CSV / XLSX** — Suba dumps `.sql` ou planilhas direto pelo painel.
+- **Public/Private toggle** — Exponha tabelas como API pública de leitura com um clique.
+- **Dashboard interativo** — Widgets com gráficos e tabelas, exportável como PDF/JPEG/CSV/Excel.
+
+---
+
+## Arquitetura
+
+```
+├── frontend/              → Next.js (App Router) + TailwindCSS + Framer Motion
+│   ├── src/app/           → Páginas: login, admin, dashboard, explorador público
+│   └── src/components/    → AuthContext, ThemeContext, ThemeSwitcher, Widgets
 │
-├── backend/           → FastAPI + SQLAlchemy (async Python)
-│   ├── main.py        → All API routes (CRUD, import, auth, public)
-│   ├── auth.py        → JWT authentication & role guards
-│   ├── models.py      → User, DynamicTable, DynamicColumn, DynamicRelation
-│   ├── schemas.py     → Pydantic validation schemas
-│   ├── dynamic_schema.py → Physical table DDL engine
-│   └── database.py    → SQLAlchemy engine setup (SQLite or Postgres)
+├── backend/               → FastAPI + SQLAlchemy (Python 3.13)
+│   ├── main.py            → Todos os endpoints (CRUD, import, auth, público)
+│   ├── auth.py            → JWT, bcrypt, QR auth, guards de role
+│   ├── models.py          → User, DatabaseGroup, DynamicTable, DynamicColumn, DynamicRelation
+│   ├── schemas.py         → Validação Pydantic
+│   ├── dynamic_schema.py  → Motor DDL físico
+│   └── database.py        → Engine SQLAlchemy (SQLite ou Postgres)
 ```
 
-## 🚀 Quick Start (Local)
+---
 
-### 1. Backend
+## Quick Start
+
+### Backend
 ```bash
 cd backend
 python -m venv venv
@@ -46,59 +72,69 @@ source venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
-API runs at `http://localhost:8000`. A master account is automatically created on first launch:
-- **Username:** `puczaras`
-- **Password:** `Zup Paras`
 
-### 2. Frontend
+API sobe em `http://localhost:8000`. Uma conta master é criada automaticamente no primeiro boot:
+
+| Campo | Valor |
+|-------|-------|
+| Usuário | `puczaras` |
+| Senha | `Zup Paras` |
+
+### Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`:
-| Route | Description |
-|-------|-------------|
-| `/login` | Authentication page |
-| `/admin` | Admin dashboard (requires login) |
-| `/admin/tables` | Table builder & management |
-| `/admin/import/sql` | Upload SQL scripts |
-| `/admin/import/data` | Upload CSV/XLSX files |
-| `/admin/users` | Create moderator accounts (admin only) |
-| `/dashboard` | Public interactive dashboard |
+Acesse `http://localhost:3000`:
+
+| Rota | Descrição |
+|------|-----------|
+| `/` | Landing page |
+| `/login` | Autenticação |
+| `/admin` | Painel administrativo |
+| `/admin/tables` | Table builder |
+| `/admin/import/sql` | Upload de scripts SQL |
+| `/admin/import/data` | Upload CSV/XLSX |
+| `/admin/users` | Criar moderadores |
+| `/explore` | Explorador público de dados |
 
 ---
 
-## ☁️ Production Deployment Guide
+## Deploy em Produção
 
-### Database (Neon Postgres)
-> ⚠️ Do **not** use SQLite in cloud environments — serverless containers are ephemeral and your `.db` file will be lost on restart.
+### Banco de Dados (Neon Postgres)
+> SQLite não é adequado em ambientes serverless — containers são efêmeros e o `.db` se perde no restart.
 
-1. Create a free Postgres database on [Neon](https://neon.tech) (or via Vercel Storage).
-2. Copy the `DATABASE_URL` connection string.
+1. Crie um banco gratuito no [Neon](https://neon.tech).
+2. Copie a `DATABASE_URL`.
 
-### Backend → Railway (or Render)
-1. Create a new project, connect your GitHub repo.
-2. Set **Root Directory** to `backend`.
-3. Set **Start Command** to: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-4. Add environment variables:
-   - `DATABASE_URL` = your Neon Postgres connection string
-   - `SECRET_KEY` = a long random string for JWT signing
-5. Generate a public domain (e.g. `your-app.up.railway.app`).
+### Backend → Railway (ou Render)
+1. Conecte o repositório, defina **Root Directory** como `backend`.
+2. **Start Command:** `uvicorn main:app --host 0.0.0.0 --port $PORT`
+3. Variáveis de ambiente:
+   - `DATABASE_URL` — string de conexão Neon Postgres
+   - `SECRET_KEY` — string aleatória longa para assinar JWTs
 
 ### Frontend → Vercel
-1. Import the repository, set **Framework** to Next.js, **Root Directory** to `frontend`.
-2. Add environment variable:
-   - `NEXT_PUBLIC_API_URL` = `https://your-app.up.railway.app`
-3. Deploy!
+1. Importe o repo, **Framework:** Next.js, **Root Directory:** `frontend`.
+2. Variável de ambiente:
+   - `NEXT_PUBLIC_API_URL` — URL do backend no Railway
+3. Deploy.
 
 ---
 
-## 🎓 Origin Story
+## Origem
 
-This template evolved from a **Scientific Initiation (Undergraduate Research)** project originally built with **Flask, static HTML/CSS, and MySQL**. It has been fully rewritten using industry-standard, state-of-the-art technologies to achieve production-grade reliability and scalability.
+Atlas nasceu de um projeto de **Iniciação Científica** originalmente escrito em Flask, HTML estático e MySQL. Foi reescrito do zero com tecnologias modernas para ter confiabilidade e escalabilidade em produção.
 
-## 📄 License
+---
 
-This project is open-source under the [Apache License 2.0](LICENSE).
+<div align="center">
+
+**[Mora Org](https://github.com/Mora-Org)** · Código com intenção · Open Source com alma
+
+*mora (lat.) — a pausa necessária para que a profundidade aconteça.*
+
+</div>
