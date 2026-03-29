@@ -109,6 +109,18 @@ def startup_event():
         if _old_master:
             db_seed.delete(_old_master)
             db_seed.commit()
+        # Seed test admin account for automated frontend tests
+        _test_admin = db_seed.query(models.User).filter(models.User.username == "testadmin").first()
+        if not _test_admin:
+            _master = db_seed.query(models.User).filter(models.User.role == "master").first()
+            _new_admin = models.User(
+                username="testadmin",
+                password_hash=get_password_hash("TestAdmin123!"),
+                role="admin",
+                parent_id=_master.id if _master else None,
+            )
+            db_seed.add(_new_admin)
+            db_seed.commit()
     finally:
         db_seed.close()
 
@@ -743,51 +755,61 @@ def delete_record(table_name: str, record_id: int, db: Session = Depends(get_db)
 # ==========================================
 # SQL Script Import (Admin only)
 # ==========================================
-import sqlparse
+import sqlglot
+from sqlglot import exp
 
-ALLOWED_SQL_TYPES = {'CREATE', 'INSERT'}
-
-import re as _re
 from sqlalchemy import inspect as _inspect
 
 def _parse_sql_statements(sql_text: str, prefix: str):
-    """Parse SQL text into a list of statement info dicts for dry-run or execution."""
+    """Parse SQL text into a list of safe statement info dicts for execution."""
     results = []
-    for raw_stmt in sqlparse.split(sql_text):
-        stmt = raw_stmt.strip()
-        if not stmt:
+    try:
+        parsed_stmts = sqlglot.parse(sql_text, read="sqlite")
+    except Exception as e:
+        results.append({"type": "UNKNOWN", "status": "blocked", "message": f"Syntax error: {e}"})
+        return results
+
+    for stmt in parsed_stmts:
+        if stmt is None:
             continue
-        parsed = sqlparse.parse(stmt)[0]
-        stmt_type = (parsed.get_type() or "").upper()
+        try:
+            if isinstance(stmt, exp.Create):
+                stmt_type = "CREATE"
+                if stmt.args.get("kind") != "TABLE":
+                    results.append({"type": stmt_type, "status": "blocked", "message": "Only CREATE TABLE is allowed."})
+                    continue
+                table_node = stmt.find(exp.Table)
+                if not table_node or not table_node.name:
+                    results.append({"type": stmt_type, "status": "blocked", "message": "No table name found."})
+                    continue
 
-        if stmt_type not in ALLOWED_SQL_TYPES:
-            results.append({"type": stmt_type or "UNKNOWN", "status": "blocked",
-                            "message": f"Statement type '{stmt_type}' is not allowed."})
-            continue
-
-        if stmt_type == "CREATE":
-            match = _re.search(r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([^\s\(\)]+)", stmt, _re.IGNORECASE)
-            if match:
-                table_name = match.group(1).strip('`" ')
+                table_name = table_node.name
                 physical_name = f"{prefix}{table_name}"
-                results.append({"type": "CREATE", "status": "ok",
-                                "table_name": table_name, "physical_name": physical_name,
-                                "statement": stmt})
-            else:
-                results.append({"type": "CREATE", "status": "blocked",
-                                "message": "Could not extract table name from CREATE statement."})
+                # Safely mutate AST
+                table_node.set("this", exp.Identifier(this=physical_name, quoted=False))
+                safe_sql = stmt.sql(dialect="sqlite")
 
-        elif stmt_type == "INSERT":
-            match = _re.search(r"INSERT\s+INTO\s+([^\s\(\)]+)", stmt, _re.IGNORECASE)
-            if match:
-                table_name = match.group(1).strip('`" ')
+                results.append({"type": stmt_type, "status": "ok", "table_name": table_name, "physical_name": physical_name, "statement": safe_sql})
+
+            elif isinstance(stmt, exp.Insert):
+                stmt_type = "INSERT"
+                table_node = stmt.find(exp.Table)
+                if not table_node or not table_node.name:
+                    results.append({"type": stmt_type, "status": "blocked", "message": "No table name found in INSERT."})
+                    continue
+
+                table_name = table_node.name
                 physical_name = f"{prefix}{table_name}"
-                results.append({"type": "INSERT", "status": "ok",
-                                "table_name": table_name, "physical_name": physical_name,
-                                "statement": stmt})
+                # Safely mutate AST
+                table_node.set("this", exp.Identifier(this=physical_name, quoted=False))
+                safe_sql = stmt.sql(dialect="sqlite")
+
+                results.append({"type": stmt_type, "status": "ok", "table_name": table_name, "physical_name": physical_name, "statement": safe_sql})
+
             else:
-                results.append({"type": "INSERT", "status": "blocked",
-                                "message": "Could not extract table name from INSERT statement."})
+                results.append({"type": stmt.__class__.__name__.upper(), "status": "blocked", "message": "Statement not allowed. Only CREATE TABLE and INSERT are supported."})
+        except Exception as e:
+            results.append({"type": "UNKNOWN", "status": "blocked", "message": str(e)})
 
     return results
 
@@ -852,8 +874,7 @@ async def import_sql_script(file: UploadFile = File(...), db: Session = Depends(
         if item["type"] == "CREATE":
             table_name = item["table_name"]
             physical_name = item["physical_name"]
-            prefixed_stmt = _re.sub(rf"\b{_re.escape(table_name)}\b", physical_name,
-                                    item["statement"], count=1, flags=_re.IGNORECASE)
+            prefixed_stmt = item["statement"]
             try:
                 # Execute DDL
                 with engine.begin() as conn:
@@ -894,8 +915,7 @@ async def import_sql_script(file: UploadFile = File(...), db: Session = Depends(
         elif item["type"] == "INSERT":
             table_name = item["table_name"]
             physical_name = item["physical_name"]
-            prefixed_stmt = _re.sub(rf"\b{_re.escape(table_name)}\b", physical_name,
-                                    item["statement"], count=1, flags=_re.IGNORECASE)
+            prefixed_stmt = item["statement"]
             try:
                 with engine.begin() as conn:
                     conn.execute(_text(prefixed_stmt))
