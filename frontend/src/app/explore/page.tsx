@@ -1,262 +1,225 @@
-"use client"
-import { useState, useEffect } from "react"
-import { Search, Filter, ChevronUp, ChevronDown, Database, ArrowLeft, ArrowRight, X, Link as LinkIcon } from "lucide-react"
-import Link from "next/link"
+'use client'
+import Link from 'next/link'
+import { useEffect, useMemo, useState } from 'react'
+import { Card, Eyebrow, Hairline, Icon, Input, Pill, SectionNum } from '@/components/ui'
 
 type PublicTable = {
-  id: number; name: string; description: string | null
-  columns: { name: string; data_type: string; is_primary: boolean }[]
+  id: number
+  name: string
+  description: string | null
+  columns?: { name: string; data_type: string; is_primary?: boolean }[]
+  group?: string | null
+  count?: number
 }
-type Relation = { id: number; name: string; from_table: string; to_table: string; relation_type: string }
+
+const ACCENT_TONES = ['var(--accent)', 'var(--ok)', 'var(--warn)', 'var(--danger)']
 
 export default function ExplorePage() {
   const [tables, setTables] = useState<PublicTable[]>([])
-  const [relations, setRelations] = useState<Relation[]>([])
-  const [selected, setSelected] = useState<string | null>(null)
-  const [data, setData] = useState<any[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
+  const [search, setSearch] = useState('')
+  const [activeFilter, setActiveFilter] = useState<string>('todos')
+  const [previews, setPreviews] = useState<Record<string, unknown[]>>({})
 
-  // Filters
-  const [search, setSearch] = useState("")
-  const [filterCol, setFilterCol] = useState("")
-  const [filterOp, setFilterOp] = useState("contains")
-  const [filterVal, setFilterVal] = useState("")
-  const [sortCol, setSortCol] = useState("")
-  const [sortOrder, setSortOrder] = useState("asc")
-  const [offset, setOffset] = useState(0)
-  const limit = 50
-
-  const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+  const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
   useEffect(() => {
-    fetch(`${API}/public/tables/`).then(r => r.json()).then(setTables).catch(console.error)
-    fetch(`${API}/public/relations/`).then(r => r.json()).then((d: any) => setRelations(Array.isArray(d) ? d : [])).catch(console.error)
+    fetch(`${API}/public/tables/`)
+      .then(r => r.json())
+      .then((d: PublicTable[]) => setTables(Array.isArray(d) ? d : []))
+      .catch(() => {})
   }, [API])
 
   useEffect(() => {
-    if (!selected) return
-    fetchData()
-  }, [selected, search, filterCol, filterOp, filterVal, sortCol, sortOrder, offset])
+    // Fetch preview rows for the visible tables (up to 6)
+    tables.slice(0, 6).forEach(t => {
+      if (previews[t.name]) return
+      fetch(`${API}/public/api/${t.name}?limit=2`)
+        .then(r => r.json())
+        .then((res) => {
+          const rows = Array.isArray(res) ? res : (res?.data || [])
+          setPreviews(prev => ({ ...prev, [t.name]: rows }))
+        })
+        .catch(() => {})
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tables])
 
-  const fetchData = () => {
-    if (!selected) return
-    setLoading(true)
-    const params = new URLSearchParams()
-    if (search) params.set("search", search)
-    if (filterCol && filterVal) { params.set("filter_col", filterCol); params.set("filter_val", filterVal); params.set("filter_op", filterOp) }
-    if (sortCol) { params.set("sort", sortCol); params.set("order", sortOrder) }
-    params.set("limit", String(limit))
-    params.set("offset", String(offset))
+  const groups = useMemo(() => {
+    const set = new Set<string>(['todos'])
+    tables.forEach(t => { if (t.group) set.add(t.group) })
+    return Array.from(set)
+  }, [tables])
 
-    fetch(`${API}/public/api/${selected}?${params}`)
-      .then(r => r.json())
-      .then(res => { setData(res.data || []); setTotal(res.total || 0); setLoading(false) })
-      .catch(() => setLoading(false))
-  }
-
-  const selectedTable = tables.find(t => t.name === selected)
-  const columns = selectedTable?.columns || []
-  const relatedTables = relations.filter(r => r.from_table === selected || r.to_table === selected)
-
-  const handleSort = (col: string) => {
-    if (sortCol === col) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-    } else {
-      setSortCol(col); setSortOrder("asc")
-    }
-    setOffset(0)
-  }
-
-  const clearFilters = () => {
-    setSearch(""); setFilterCol(""); setFilterVal(""); setFilterOp("contains"); setSortCol(""); setSortOrder("asc"); setOffset(0)
-  }
-
-  const totalPages = Math.ceil(total / limit)
-  const currentPage = Math.floor(offset / limit) + 1
+  const filtered = tables.filter(t => {
+    if (activeFilter !== 'todos' && t.group !== activeFilter) return false
+    if (!search) return true
+    const q = search.toLowerCase()
+    return t.name.toLowerCase().includes(q) ||
+      (t.description ?? '').toLowerCase().includes(q)
+  })
 
   return (
-    <div className="min-h-screen" style={{ background: 'hsl(var(--color-bg))', color: 'hsl(var(--color-text))' }}>
-      {/* Header */}
-      <header className="px-6 py-4 flex items-center gap-4" style={{ borderBottom: '1px solid hsl(var(--color-border))', background: 'hsl(var(--color-bg-card))' }}>
-        <Link href="/" className="p-2 rounded-lg transition-colors" style={{ color: 'hsl(var(--color-text-muted))' }}>
-          <ArrowLeft className="w-5 h-5" />
+    <div style={{ minHeight: '100vh', background: 'var(--bg-page)', color: 'var(--fg-primary)' }}>
+      {/* Top bar */}
+      <header style={{
+        padding: '20px 48px', borderBottom: '1px solid var(--rule)',
+        background: 'var(--bg-surface)', display: 'flex', alignItems: 'baseline',
+        justifyContent: 'space-between', gap: 16,
+      }}>
+        <Link href="/" style={{
+          fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500,
+          color: 'var(--fg-primary)', letterSpacing: '-0.01em', textDecoration: 'none',
+        }}>
+          Atlas
         </Link>
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: 'hsl(var(--color-primary))' }}>Data Explorer</h1>
-          <p className="text-xs" style={{ color: 'hsl(var(--color-text-muted))' }}>Browse public datasets</p>
-        </div>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--fg-muted)' }}>
+          Mora · busca pública
+        </span>
       </header>
 
-      <div className="flex">
-        {/* Sidebar — Table List */}
-        <aside className="w-64 p-4 hidden md:block shrink-0" style={{ borderRight: '1px solid hsl(var(--color-border))', background: 'hsl(var(--color-bg-card))', minHeight: 'calc(100vh - 73px)' }}>
-          <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: 'hsl(var(--color-text-muted))' }}>Public Tables</p>
-          {tables.length === 0 ? (
-            <p className="text-sm" style={{ color: 'hsl(var(--color-text-muted))' }}>No public tables available.</p>
-          ) : (
-            <div className="space-y-1">
-              {tables.map(t => (
-                <button key={t.id} onClick={() => { setSelected(t.name); setOffset(0); clearFilters() }}
-                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 transition-all"
+      <div style={{ padding: '48px 48px 80px', maxWidth: 1200, margin: '0 auto' }}>
+        {/* Hero */}
+        <div style={{ marginBottom: 48 }}>
+          <Eyebrow num={8}>Explore</Eyebrow>
+          <h1 style={{
+            fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 'var(--text-4xl)',
+            fontWeight: 400, letterSpacing: '-0.025em', marginTop: 16, lineHeight: 1.05,
+            color: 'var(--fg-primary)',
+          }}>
+            Mil Atlas, num só lugar.
+          </h1>
+          <p style={{
+            fontFamily: 'var(--font-display)', fontSize: 'var(--text-lg)', color: 'var(--fg-secondary)',
+            maxWidth: 640, marginTop: 18, lineHeight: 1.5,
+          }}>
+            Procure pelos catálogos públicos. Acervos, federações, cooperativas, edições.
+          </p>
+        </div>
+
+        {/* Search */}
+        <div style={{ maxWidth: 560, marginBottom: 24 }}>
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            icon="search"
+            placeholder="ex.: editora, vinhos, museu, cooperativa…"
+            style={{ padding: '14px 14px 14px 40px', fontSize: 16 }}
+          />
+        </div>
+
+        {/* Filter pills */}
+        {groups.length > 1 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 32 }}>
+            {groups.map(g => {
+              const active = activeFilter === g
+              return (
+                <button
+                  key={g}
+                  onClick={() => setActiveFilter(g)}
                   style={{
-                    background: selected === t.name ? 'hsl(var(--color-primary) / 0.12)' : 'transparent',
-                    color: selected === t.name ? 'hsl(var(--color-primary))' : 'hsl(var(--color-text-muted))'
-                  }}>
-                  <Database className="w-4 h-4 shrink-0" />
-                  <div className="truncate">
-                    <div className="font-medium">{t.name}</div>
-                    {t.description && <div className="text-[10px] truncate opacity-70">{t.description}</div>}
-                  </div>
+                    background: active ? 'var(--accent)' : 'var(--bg-elevated)',
+                    color: active ? 'var(--fg-inverse)' : 'var(--fg-secondary)',
+                    fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500,
+                    letterSpacing: '0.04em', textTransform: 'lowercase',
+                    padding: '6px 12px', borderRadius: 'var(--radius-full)',
+                    border: '1px solid var(--rule)', cursor: 'pointer',
+                  }}
+                >
+                  {g}
                 </button>
-              ))}
-            </div>
-          )}
+              )
+            })}
+          </div>
+        )}
 
-          {/* Related Tables */}
-          {relatedTables.length > 0 && (
-            <div className="mt-6">
-              <p className="text-xs font-semibold mb-2 uppercase tracking-wider flex items-center gap-1" style={{ color: 'hsl(var(--color-text-muted))' }}>
-                <LinkIcon className="w-3 h-3" /> Relations
+        <Hairline strong my={4} />
+
+        {/* Results */}
+        <div style={{
+          marginTop: 32, display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 18,
+        }}>
+          {filtered.length === 0 ? (
+            <div style={{
+              gridColumn: '1 / -1', padding: '80px 24px', textAlign: 'center',
+              border: '1px dashed var(--rule)', borderRadius: 'var(--radius-md)',
+            }}>
+              <Icon name="search" size={28} color="var(--fg-muted)" />
+              <p style={{
+                fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 16,
+                color: 'var(--fg-muted)', marginTop: 14,
+              }}>
+                Nada encontrado por "{search}".
               </p>
-              {relatedTables.map(r => {
-                const target = r.from_table === selected ? r.to_table : r.from_table
-                return (
-                  <button key={r.id} onClick={() => { setSelected(target); clearFilters() }}
-                    className="w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors mb-1"
-                    style={{ color: 'hsl(var(--color-text-muted))' }}>
-                    <span>{target}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'hsl(var(--color-primary) / 0.1)', color: 'hsl(var(--color-primary))' }}>
-                      {r.relation_type}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 p-6 overflow-auto">
-          {!selected ? (
-            <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-              <Database className="w-16 h-16 mb-4" style={{ color: 'hsl(var(--color-primary) / 0.3)' }} />
-              <h2 className="text-2xl font-bold mb-2" style={{ color: 'hsl(var(--color-text))' }}>Select a table</h2>
-              <p className="text-sm" style={{ color: 'hsl(var(--color-text-muted))' }}>Choose a public table from the sidebar to explore its data.</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {/* Table Title */}
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold" style={{ color: 'hsl(var(--color-text))' }}>{selected}</h2>
-                <span className="text-sm" style={{ color: 'hsl(var(--color-text-muted))' }}>{total} records</span>
-              </div>
-
-              {/* Search & Filter Bar */}
-              <div className="flex flex-wrap gap-3 items-end">
-                {/* Search */}
-                <div className="flex-1 min-w-[200px]">
-                  <div className="relative">
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'hsl(var(--color-text-muted))' }} />
-                    <input type="text" placeholder="Search all columns..." value={search}
-                      onChange={(e: any) => { setSearch(e.target.value); setOffset(0) }}
-                      className="w-full pl-9 pr-4 py-2 rounded-lg text-sm focus:outline-none"
-                      style={{ background: 'hsl(var(--color-bg-card))', border: '1px solid hsl(var(--color-border))', color: 'hsl(var(--color-text))' }} />
-                  </div>
-                </div>
-                {/* Column Filter */}
-                <select value={filterCol} onChange={(e: any) => { setFilterCol(e.target.value); setOffset(0) }}
-                  className="px-3 py-2 rounded-lg text-sm focus:outline-none"
-                  style={{ background: 'hsl(var(--color-bg-card))', border: '1px solid hsl(var(--color-border))', color: 'hsl(var(--color-text))' }}>
-                  <option value="">Filter column...</option>
-                  {columns.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-                </select>
-                <select value={filterOp} onChange={(e: any) => setFilterOp(e.target.value)}
-                  className="px-3 py-2 rounded-lg text-sm focus:outline-none"
-                  style={{ background: 'hsl(var(--color-bg-card))', border: '1px solid hsl(var(--color-border))', color: 'hsl(var(--color-text))' }}>
-                  <option value="eq">= Equal</option>
-                  <option value="contains">Contains</option>
-                  <option value="gt">&gt; Greater</option>
-                  <option value="lt">&lt; Less</option>
-                  <option value="neq">≠ Not equal</option>
-                </select>
-                <input type="text" placeholder="Value..." value={filterVal}
-                  onChange={(e: any) => { setFilterVal(e.target.value); setOffset(0) }}
-                  className="w-32 px-3 py-2 rounded-lg text-sm focus:outline-none"
-                  style={{ background: 'hsl(var(--color-bg-card))', border: '1px solid hsl(var(--color-border))', color: 'hsl(var(--color-text))' }} />
-                {(search || filterCol || filterVal || sortCol) && (
-                  <button onClick={clearFilters} className="p-2 rounded-lg text-red-400 hover:bg-red-500/10">
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              {/* Data Grid */}
-              <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid hsl(var(--color-border))' }}>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr style={{ background: 'hsl(var(--color-bg-surface))' }}>
-                        {columns.map(col => (
-                          <th key={col.name} onClick={() => handleSort(col.name)}
-                            className="px-4 py-3 text-left font-medium cursor-pointer select-none whitespace-nowrap"
-                            style={{ color: 'hsl(var(--color-text-muted))', borderBottom: '1px solid hsl(var(--color-border))' }}>
-                            <div className="flex items-center gap-1">
-                              {col.name}
-                              {sortCol === col.name && (
-                                sortOrder === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
-                              )}
-                              <span className="text-[10px] opacity-40">{col.data_type}</span>
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {loading ? (
-                        <tr><td colSpan={columns.length} className="p-8 text-center" style={{ color: 'hsl(var(--color-text-muted))' }}>Loading...</td></tr>
-                      ) : data.length === 0 ? (
-                        <tr><td colSpan={columns.length} className="p-8 text-center" style={{ color: 'hsl(var(--color-text-muted))' }}>No data found.</td></tr>
-                      ) : (
-                        data.map((row: any, i: number) => (
-                          <tr key={i} className="transition-colors" style={{ background: i % 2 === 0 ? 'hsl(var(--color-bg-card))' : 'transparent' }}>
-                            {columns.map(col => (
-                              <td key={col.name} className="px-4 py-2.5 whitespace-nowrap"
-                                style={{ borderBottom: '1px solid hsl(var(--color-border) / 0.5)', color: col.is_primary ? 'hsl(var(--color-primary))' : 'hsl(var(--color-text))' }}>
-                                {row[col.name] !== null && row[col.name] !== undefined ? String(row[col.name]) : <span style={{ color: 'hsl(var(--color-text-muted) / 0.4)' }}>null</span>}
-                              </td>
-                            ))}
-                          </tr>
-                        ))
+            filtered.map((t, i) => {
+              const tone = ACCENT_TONES[i % ACCENT_TONES.length]
+              const initials = t.name.slice(0, 2).toUpperCase()
+              const previewRows = previews[t.name] || []
+              return (
+                <Link
+                  key={t.id}
+                  href={`/?table=${t.name}`}
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Card interactive padding={false} style={{ overflow: 'hidden', height: '100%' }}>
+                    <div style={{
+                      height: 90, background: tone, position: 'relative',
+                      display: 'flex', alignItems: 'flex-end', padding: 14,
+                    }}>
+                      <span style={{
+                        fontFamily: 'var(--font-display)', fontStyle: 'italic',
+                        fontSize: 38, color: 'var(--fg-inverse)', lineHeight: 1, opacity: 0.92,
+                      }}>
+                        {initials}
+                      </span>
+                      <SectionNum style={{ position: 'absolute', top: 10, right: 14, color: 'var(--fg-inverse)', opacity: 0.85 }}>
+                        {String(i + 1).padStart(2, '0')}
+                      </SectionNum>
+                    </div>
+                    <div style={{ padding: 18 }}>
+                      <Eyebrow style={{ marginBottom: 6 }}>
+                        {t.group ? t.group : 'tabela pública'}
+                      </Eyebrow>
+                      <h3 style={{
+                        fontFamily: 'var(--font-display)', fontSize: 'var(--text-lg)',
+                        fontWeight: 400, margin: '0 0 8px', letterSpacing: '-0.005em',
+                        color: 'var(--fg-primary)',
+                      }}>
+                        {t.name}
+                      </h3>
+                      {t.description && (
+                        <p style={{
+                          fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--fg-secondary)',
+                          margin: '0 0 12px', lineHeight: 1.5, fontStyle: 'italic',
+                        }}>
+                          {t.description}
+                        </p>
                       )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between pt-2">
-                  <span className="text-sm" style={{ color: 'hsl(var(--color-text-muted))' }}>
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <div className="flex gap-2">
-                    <button onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0}
-                      className="px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 disabled:opacity-30"
-                      style={{ background: 'hsl(var(--color-bg-card))', border: '1px solid hsl(var(--color-border))', color: 'hsl(var(--color-text))' }}>
-                      <ArrowLeft className="w-3.5 h-3.5" /> Previous
-                    </button>
-                    <button onClick={() => setOffset(offset + limit)} disabled={offset + limit >= total}
-                      className="px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 disabled:opacity-30"
-                      style={{ background: 'hsl(var(--color-bg-card))', border: '1px solid hsl(var(--color-border))', color: 'hsl(var(--color-text))' }}>
-                      Next <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                        {(t.columns || []).slice(0, 3).map(c => (
+                          <Pill key={c.name} tone="muted">{c.name}</Pill>
+                        ))}
+                        {(t.columns?.length ?? 0) > 3 && (
+                          <Pill tone="muted">+{(t.columns?.length ?? 0) - 3}</Pill>
+                        )}
+                      </div>
+                      <div style={{
+                        fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)',
+                        letterSpacing: '0.04em',
+                      }}>
+                        {previewRows.length > 0
+                          ? `${previewRows.length} preview · ${(t.columns?.length ?? 0)} colunas`
+                          : `${(t.columns?.length ?? 0)} colunas`}
+                      </div>
+                    </div>
+                  </Card>
+                </Link>
+              )
+            })
           )}
-        </main>
+        </div>
       </div>
     </div>
   )

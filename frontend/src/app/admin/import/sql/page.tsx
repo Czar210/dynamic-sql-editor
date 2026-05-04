@@ -1,236 +1,338 @@
-"use client"
-import React, { useState } from 'react'
+'use client'
+import { useState } from 'react'
 import { useAuth } from '@/components/AuthContext'
-import { FileCode, CheckCircle, AlertCircle, AlertTriangle, Loader2, ArrowRight, Database } from 'lucide-react'
+import { Button, Card, Eyebrow, Hairline, Icon, Pill, SectionNum, Textarea } from '@/components/ui'
 
-type StmtStatus = "ok" | "blocked" | "conflict"
+type Step = 'compose' | 'plan' | 'done'
+type StmtStatus = 'ok' | 'blocked' | 'conflict' | 'warn' | 'err'
 
-interface StatementResult {
-  type: string
+interface Statement {
+  type?: string
   status: StmtStatus
-  message: string
+  message?: string
+  sql?: string
   table_name?: string
 }
 
-interface DryRunResult {
-  summary: { total: number; ok: number; blocked: number; conflicts: number }
-  statements: StatementResult[]
+interface DryRun {
+  summary?: { total?: number; ok?: number; blocked?: number; conflicts?: number }
+  statements: Statement[]
 }
 
 interface CommitResult {
-  created_tables: string[]
-  inserted_rows: number
-  errors: string[]
+  created_tables?: string[]
+  inserted_rows?: number
+  errors?: string[]
 }
 
-type Step = "upload" | "preview" | "done"
+const toneFor = (s: StmtStatus): 'ok' | 'warn' | 'err' | 'muted' => {
+  if (s === 'ok') return 'ok'
+  if (s === 'conflict' || s === 'warn') return 'warn'
+  if (s === 'blocked' || s === 'err') return 'err'
+  return 'muted'
+}
 
 export default function ImportSQLPage() {
   const { token } = useAuth()
-  const [file, setFile] = useState<File | null>(null)
-  const [step, setStep] = useState<Step>("upload")
-  const [dryRun, setDryRun] = useState<DryRunResult | null>(null)
-  const [commitResult, setCommitResult] = useState<CommitResult | null>(null)
+  const [sql, setSql] = useState('')
+  const [step, setStep] = useState<Step>('compose')
+  const [dry, setDry] = useState<DryRun | null>(null)
+  const [committed, setCommitted] = useState<CommitResult | null>(null)
   const [loading, setLoading] = useState(false)
-  const [dragOver, setDragOver] = useState(false)
 
-  const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-  const authHeaders = { Authorization: `Bearer ${token}` }
+  const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+  const auth = { Authorization: `Bearer ${token}` }
 
-  const handleDryRun = async () => {
-    if (!file) return
+  const handleValidate = async () => {
+    if (!sql.trim()) return
     setLoading(true)
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const res = await fetch(`${API}/api/import/sql/dry-run`, {
-        method: 'POST', headers: authHeaders, body: formData
+      // The backend accepts either multipart `file` or JSON `sql_content` — try JSON first
+      let res = await fetch(`${API}/api/import/sql/dry-run`, {
+        method: 'POST',
+        headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql_content: sql }),
       })
-      const data = await res.json()
-      setDryRun(data)
-      setStep("preview")
-    } catch (e: any) {
-      setDryRun({ summary: { total: 0, ok: 0, blocked: 0, conflicts: 0 }, statements: [{ type: "ERROR", status: "blocked", message: e.message }] })
-      setStep("preview")
+      if (!res.ok) {
+        const fileFD = new FormData()
+        const blob = new Blob([sql], { type: 'text/plain' })
+        fileFD.append('file', blob, 'pasted.sql')
+        res = await fetch(`${API}/api/import/sql/dry-run`, {
+          method: 'POST', headers: auth, body: fileFD,
+        })
+      }
+      const data: DryRun = await res.json()
+      setDry(data)
+      setStep('plan')
+    } catch (e) {
+      setDry({ statements: [{ status: 'err', message: (e as Error).message }] })
+      setStep('plan')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const handleCommit = async () => {
-    if (!file) return
+    if (!sql.trim()) return
     setLoading(true)
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const res = await fetch(`${API}/api/import/sql`, {
-        method: 'POST', headers: authHeaders, body: formData
+      let res = await fetch(`${API}/api/import/sql`, {
+        method: 'POST',
+        headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql_content: sql }),
       })
-      setCommitResult(await res.json())
-      setStep("done")
-    } catch (e: any) {
-      setCommitResult({ created_tables: [], inserted_rows: 0, errors: [e.message] })
-      setStep("done")
+      if (!res.ok) {
+        const fd = new FormData()
+        const blob = new Blob([sql], { type: 'text/plain' })
+        fd.append('file', blob, 'pasted.sql')
+        res = await fetch(`${API}/api/import/sql`, {
+          method: 'POST', headers: auth, body: fd,
+        })
+      }
+      const data: CommitResult = await res.json()
+      setCommitted(data)
+      setStep('done')
+    } catch (e) {
+      setCommitted({ errors: [(e as Error).message] })
+      setStep('done')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const reset = () => {
-    setFile(null); setStep("upload"); setDryRun(null); setCommitResult(null)
+    setSql(''); setDry(null); setCommitted(null); setStep('compose')
   }
 
-  const statusIcon = (s: StmtStatus) => {
-    if (s === "ok") return <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-    if (s === "conflict") return <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-    return <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-  }
-
-  const statusColor = (s: StmtStatus) => {
-    if (s === "ok") return 'text-emerald-400'
-    if (s === "conflict") return 'text-amber-400'
-    return 'text-red-400'
-  }
-
-  const canCommit = dryRun && dryRun.summary.ok > 0
+  const stmts = dry?.statements ?? []
+  const okCount = stmts.filter(s => s.status === 'ok').length
+  const warnCount = stmts.filter(s => s.status === 'conflict' || s.status === 'warn').length
+  const errCount = stmts.filter(s => s.status === 'blocked' || s.status === 'err').length
 
   return (
-    <div className="space-y-8 max-w-3xl">
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: 'hsl(var(--color-text))' }}>Importar Script SQL</h1>
-        <p className="mt-1 text-sm" style={{ color: 'hsl(var(--color-text-muted))' }}>
-          Faça upload de um arquivo .sql com comandos CREATE TABLE e INSERT INTO.
+    <div style={{ maxWidth: 1080 }}>
+      {/* Header */}
+      <header style={{ marginBottom: 32 }}>
+        <Eyebrow num="5a">Importar SQL</Eyebrow>
+        <h1 style={{
+          fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 400,
+          letterSpacing: '-0.02em', marginTop: 12, fontStyle: 'italic',
+        }}>
+          A partir de SQL
+        </h1>
+        <p style={{
+          fontFamily: 'var(--font-display)', fontSize: 'var(--text-md)', color: 'var(--fg-secondary)',
+          maxWidth: 640, marginTop: 12, lineHeight: 1.5,
+        }}>
+          Cole o conteúdo de um arquivo .sql. Atlas faz dry-run antes — você decide se executa.
         </p>
-      </div>
+      </header>
 
       {/* Step indicator */}
-      <div className="flex items-center gap-2 text-sm">
-        {(["upload", "preview", "done"] as Step[]).map((s, i) => (
-          <React.Fragment key={s}>
-            <span className={`px-3 py-1 rounded-full font-medium transition-colors ${step === s ? 'text-white' : ''}`}
-              style={{ background: step === s ? 'hsl(var(--color-primary))' : 'hsl(var(--color-bg-surface))', color: step === s ? '#fff' : 'hsl(var(--color-text-muted))' }}>
-              {i + 1}. {s === "upload" ? "Upload" : s === "preview" ? "Preview" : "Resultado"}
-            </span>
-            {i < 2 && <ArrowRight className="w-4 h-4 shrink-0" style={{ color: 'hsl(var(--color-text-muted))' }} />}
-          </React.Fragment>
-        ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+        {(['compose', 'plan', 'done'] as Step[]).map((s, i) => {
+          const active = step === s
+          const done = (['compose', 'plan', 'done'] as Step[]).indexOf(step) > i
+          return (
+            <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '6px 12px', borderRadius: 'var(--radius-full)',
+                background: active ? 'var(--accent)' : done ? 'var(--accent-subtle)' : 'var(--bg-elevated)',
+                color: active ? 'var(--fg-inverse)' : done ? 'var(--accent-text)' : 'var(--fg-muted)',
+                border: '1px solid var(--rule)',
+                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
+              }}>
+                <SectionNum style={{ color: 'inherit' }}>{`0${i + 1}`}</SectionNum>
+                {s === 'compose' ? 'colar' : s === 'plan' ? 'plano' : 'resultado'}
+              </div>
+              {i < 2 && <Icon name="chevron_right" size={14} color="var(--fg-muted)" />}
+            </div>
+          )
+        })}
       </div>
 
-      {/* STEP 1: Upload */}
-      {step === "upload" && (
-        <>
-          <div
-            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) setFile(f) }}
-            onClick={() => document.getElementById('sql-file-input')?.click()}
-            className="rounded-2xl p-12 flex flex-col items-center gap-4 cursor-pointer transition-all duration-200"
-            style={{
-              border: `2px dashed hsl(var(${dragOver ? '--color-primary' : '--color-border'}))`,
-              background: dragOver ? 'hsl(var(--color-primary) / 0.05)' : 'hsl(var(--color-bg-card))',
-            }}
-          >
-            <FileCode className="w-12 h-12" style={{ color: 'hsl(var(--color-primary))' }} />
-            <p className="text-sm" style={{ color: 'hsl(var(--color-text-muted))' }}>
-              {file ? file.name : 'Arraste ou clique para selecionar um .sql'}
-            </p>
-            <input id="sql-file-input" type="file" accept=".sql" className="hidden"
-              onChange={e => { if (e.target.files?.[0]) setFile(e.target.files[0]) }} />
-          </div>
+      <Hairline strong my={4} />
 
-          <button onClick={handleDryRun} disabled={!file || loading}
-            className="px-6 py-3 rounded-xl text-white text-sm font-semibold flex items-center gap-2 transition-all"
-            style={{ background: 'hsl(var(--color-primary))', opacity: (!file || loading) ? 0.5 : 1 }}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-            {loading ? 'Analisando...' : 'Analisar Script'}
-          </button>
-        </>
+      {/* STEP 1 */}
+      {step === 'compose' && (
+        <div style={{ marginTop: 28 }}>
+          <Eyebrow style={{ marginBottom: 10 }}>cole seu SQL</Eyebrow>
+          <Textarea
+            value={sql}
+            onChange={e => setSql(e.target.value)}
+            placeholder={`-- ex.: CREATE TABLE retiros (\n--   id INTEGER PRIMARY KEY,\n--   nome VARCHAR(200) NOT NULL\n-- );`}
+            rows={18}
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.7 }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>
+              {sql.length} caracteres · {sql.split('\n').length} linhas
+            </span>
+            <Button variant="primary" size="lg" icon="arrow-right" onClick={handleValidate}
+              disabled={!sql.trim() || loading}>
+              {loading ? 'Analisando…' : 'Validar dry-run'}
+            </Button>
+          </div>
+        </div>
       )}
 
-      {/* STEP 2: Dry-run preview */}
-      {step === "preview" && dryRun && (
-        <div className="space-y-4">
-          {/* Summary badges */}
-          <div className="flex flex-wrap gap-3">
-            <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-800 text-neutral-300">
-              Total: {dryRun.summary.total}
-            </span>
-            <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-400">
-              OK: {dryRun.summary.ok}
-            </span>
-            {dryRun.summary.conflicts > 0 && (
-              <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 text-amber-400">
-                Conflitos: {dryRun.summary.conflicts}
-              </span>
-            )}
-            {dryRun.summary.blocked > 0 && (
-              <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/10 text-red-400">
-                Bloqueados: {dryRun.summary.blocked}
-              </span>
-            )}
+      {/* STEP 2 */}
+      {step === 'plan' && dry && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 24 }}>
+            <Stat label="vão executar" n={String(okCount)} tone="ok" />
+            <Stat label="conflitos" n={String(warnCount)} tone="warn" />
+            <Stat label="bloqueadas" n={String(errCount)} tone="err" />
           </div>
 
-          {/* Statement list */}
-          <div className="rounded-2xl overflow-hidden divide-y"
-            style={{ background: 'hsl(var(--color-bg-card))', border: '1px solid hsl(var(--color-border))', borderColor: 'hsl(var(--color-border))' }}>
-            {dryRun.statements.map((s, i) => (
-              <div key={i} className="flex items-start gap-3 p-4">
-                {statusIcon(s.status)}
-                <div className="flex-1 min-w-0">
-                  <span className={`text-xs font-bold uppercase mr-2 ${statusColor(s.status)}`}>{s.type}</span>
-                  {s.table_name && <span className="text-xs font-mono mr-2" style={{ color: 'hsl(var(--color-text))' }}>{s.table_name}</span>}
-                  <span className="text-xs" style={{ color: 'hsl(var(--color-text-muted))' }}>{s.message}</span>
+          <Eyebrow style={{ marginBottom: 12 }}>plano de execução</Eyebrow>
+          <Card padding={false}>
+            {stmts.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 14, color: 'var(--fg-muted)' }}>
+                Nenhuma operação detectada.
+              </div>
+            ) : stmts.map((op, i) => {
+              const tone = toneFor(op.status)
+              const borderC = tone === 'ok' ? 'var(--ok)' : tone === 'warn' ? 'var(--warn)' : tone === 'err' ? 'var(--danger)' : 'var(--rule)'
+              return (
+                <div key={i} style={{
+                  display: 'grid', gridTemplateColumns: '32px 110px 1fr auto',
+                  gap: 12, alignItems: 'flex-start',
+                  padding: '14px 18px', borderBottom: '1px solid var(--rule-faint)',
+                  borderLeft: `3px solid ${borderC}`,
+                }}>
+                  <SectionNum>{String(i + 1).padStart(2, '0')}</SectionNum>
+                  <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent-text)', letterSpacing: '0.04em' }}>
+                    {op.type || op.status.toUpperCase()}
+                  </code>
+                  <div style={{ minWidth: 0 }}>
+                    {op.table_name && (
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg-primary)', marginBottom: 2 }}>
+                        {op.table_name}
+                      </div>
+                    )}
+                    {op.sql && (
+                      <pre style={{
+                        fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-secondary)',
+                        margin: '4px 0', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                        maxHeight: 120, overflow: 'hidden',
+                      }}>
+                        {op.sql.length > 240 ? `${op.sql.slice(0, 240)}…` : op.sql}
+                      </pre>
+                    )}
+                    {op.message && (
+                      <div style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 13, color: 'var(--fg-secondary)' }}>
+                        {op.message}
+                      </div>
+                    )}
+                  </div>
+                  <Pill tone={tone}>{op.status}</Pill>
+                </div>
+              )
+            })}
+          </Card>
+
+          {errCount > 0 && (
+            <div style={{
+              marginTop: 16, padding: 14, background: 'var(--danger-bg)',
+              border: '1px solid color-mix(in srgb, var(--danger) 25%, transparent)',
+              borderRadius: 'var(--radius-md)', display: 'flex', gap: 10,
+            }}>
+              <Icon name="warning" size={16} color="var(--danger)" />
+              <div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--fg-primary)', marginBottom: 4 }}>
+                  {errCount} operaç{errCount === 1 ? 'ão bloqueada' : 'ões bloqueadas'}
+                </div>
+                <div style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 13, color: 'var(--fg-secondary)' }}>
+                  Atlas não executa DROP, ALTER ou TRUNCATE em import. Edite o SQL e refaça.
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
 
-          <div className="flex gap-3">
-            <button onClick={reset} className="px-5 py-2.5 rounded-xl text-sm font-medium border transition-all"
-              style={{ borderColor: 'hsl(var(--color-border))', color: 'hsl(var(--color-text-muted))' }}>
-              Cancelar
-            </button>
-            <button onClick={handleCommit} disabled={!canCommit || loading}
-              className="px-6 py-2.5 rounded-xl text-white text-sm font-semibold flex items-center gap-2 transition-all"
-              style={{ background: 'hsl(var(--color-primary))', opacity: (!canCommit || loading) ? 0.5 : 1 }}>
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-              {loading ? 'Importando...' : `Confirmar Import (${dryRun.summary.ok} statements)`}
-            </button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 24, justifyContent: 'flex-end' }}>
+            <Button variant="ghost" onClick={() => setStep('compose')}>Voltar</Button>
+            <Button
+              variant={warnCount > 0 ? 'danger' : 'primary'}
+              size="lg"
+              icon="check"
+              disabled={loading || okCount === 0}
+              onClick={handleCommit}
+            >
+              {loading ? 'Executando…' : `Executar ${okCount} operações`}
+            </Button>
           </div>
         </div>
       )}
 
-      {/* STEP 3: Commit result */}
-      {step === "done" && commitResult && (
-        <div className="space-y-4 p-6 rounded-2xl"
-          style={{ background: 'hsl(var(--color-bg-card))', border: '1px solid hsl(var(--color-border))' }}>
-          <h3 className="font-semibold text-sm" style={{ color: 'hsl(var(--color-text))' }}>Resultado da Importação:</h3>
-          {commitResult.created_tables.length > 0 && (
-            <div className="flex items-start gap-2 text-sm">
-              <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-              <span style={{ color: 'hsl(var(--color-text))' }}>Tabelas criadas: <strong>{commitResult.created_tables.join(', ')}</strong></span>
+      {/* STEP 3 */}
+      {step === 'done' && committed && (
+        <div style={{ marginTop: 28 }}>
+          <Card>
+            <Eyebrow style={{ marginBottom: 16 }}>Resultado</Eyebrow>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+              <Stat label="tabelas criadas" n={String(committed.created_tables?.length ?? 0)} tone="ok" />
+              <Stat label="linhas inseridas" n={String(committed.inserted_rows ?? 0)} tone="accent" />
+              <Stat label="erros" n={String(committed.errors?.length ?? 0)} tone={committed.errors?.length ? 'err' : 'muted'} />
             </div>
-          )}
-          {commitResult.inserted_rows > 0 && (
-            <div className="flex items-start gap-2 text-sm">
-              <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-              <span style={{ color: 'hsl(var(--color-text))' }}>Linhas inseridas: <strong>{commitResult.inserted_rows}</strong></span>
-            </div>
-          )}
-          {commitResult.errors?.length > 0 && (
-            <div className="space-y-1 mt-2">
-              {commitResult.errors.map((err, i) => (
-                <div key={i} className="flex items-start gap-2 text-sm">
-                  <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
-                  <span className="text-red-400">{err}</span>
+
+            {committed.created_tables && committed.created_tables.length > 0 && (
+              <>
+                <Hairline my={20} />
+                <Eyebrow style={{ marginBottom: 8 }}>Criadas</Eyebrow>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {committed.created_tables.map(c => <Pill key={c} tone="ok" dot>{c}</Pill>)}
                 </div>
-              ))}
-            </div>
-          )}
-          <button onClick={reset} className="mt-4 px-5 py-2.5 rounded-xl text-sm font-medium border transition-all"
-            style={{ borderColor: 'hsl(var(--color-border))', color: 'hsl(var(--color-text-muted))' }}>
-            Nova Importação
-          </button>
+              </>
+            )}
+
+            {committed.errors && committed.errors.length > 0 && (
+              <>
+                <Hairline my={20} />
+                <Eyebrow style={{ marginBottom: 8 }}>Erros</Eyebrow>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {committed.errors.map((e, i) => (
+                    <div key={i} style={{
+                      fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--danger)',
+                      padding: 10, background: 'var(--danger-bg)', borderRadius: 'var(--radius-sm)',
+                    }}>
+                      {e}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </Card>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 24 }}>
+            <Button variant="primary" icon="upload" onClick={reset}>Importar mais</Button>
+            <Button variant="ghost" icon="table" onClick={() => location.assign('/admin/tables')}>Ir pra tabelas</Button>
+          </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function Stat({ label, n, tone }: { label: string; n: string; tone: 'ok' | 'accent' | 'warn' | 'err' | 'muted' }) {
+  const colorMap: Record<string, string> = {
+    ok: 'var(--ok)', accent: 'var(--accent-text)', warn: 'var(--warn)', err: 'var(--danger)', muted: 'var(--fg-muted)',
+  }
+  const bgMap: Record<string, string> = {
+    ok: 'var(--ok-bg)', accent: 'var(--accent-bg)', warn: 'var(--warn-bg)', err: 'var(--danger-bg)', muted: 'var(--bg-sunken)',
+  }
+  return (
+    <div style={{
+      padding: 16, borderRadius: 'var(--radius-md)',
+      background: bgMap[tone], border: '1px solid var(--rule-faint)',
+    }}>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-2xl)', color: colorMap[tone], lineHeight: 1 }}>
+        {n}
+      </div>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--fg-muted)', marginTop: 6 }}>
+        {label}
+      </div>
     </div>
   )
 }

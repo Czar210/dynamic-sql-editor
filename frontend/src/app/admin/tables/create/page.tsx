@@ -1,14 +1,17 @@
-"use client"
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { Plus, Trash2, ArrowLeft, Loader2, Save, Link2 } from "lucide-react"
-import Link from "next/link"
-import { useAuth } from "@/components/AuthContext"
+'use client'
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/components/AuthContext'
+import { Button, Card, Eyebrow, Field, Hairline, Icon, Input, Pill, SectionNum, Select, Textarea, type IconName } from '@/components/ui'
+
+type DataType = 'integer' | 'float' | 'string' | 'text' | 'boolean' | 'date' | 'datetime'
 
 interface ColumnDef {
   id: number
   name: string
-  data_type: string
+  data_type: DataType
+  is_primary: boolean
   is_nullable: boolean
   is_unique: boolean
   is_fk: boolean
@@ -16,234 +19,389 @@ interface ColumnDef {
   fk_column: string
 }
 
-export default function CreateTable() {
-  const router = useRouter()
-  const { token } = useAuth()
-  const [name, setName] = useState("")
-  const [description, setDescription] = useState("")
-  const [groupId, setGroupId] = useState<number | null>(null)
-  const [groups, setGroups] = useState<any[]>([])
-  const [availableTables, setAvailableTables] = useState<any[]>([])
-  const [columns, setColumns] = useState<ColumnDef[]>([
-    { id: 1, name: "title", data_type: "String", is_nullable: false, is_unique: false, is_fk: false, fk_table: "", fk_column: "" }
-  ])
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState("")
+interface ExistingTable {
+  id: number
+  name: string
+  columns?: { name: string; data_type?: string }[]
+}
 
-  const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const TYPE_META: Record<DataType, { icon: IconName; label: string; sql: string }> = {
+  integer:  { icon: 'rows',     label: 'inteiro',          sql: 'INTEGER' },
+  float:    { icon: 'rows',     label: 'decimal',          sql: 'DECIMAL(10,2)' },
+  string:   { icon: 'columns',  label: 'texto curto',      sql: 'VARCHAR(255)' },
+  text:     { icon: 'list',     label: 'texto longo',      sql: 'TEXT' },
+  boolean:  { icon: 'check',    label: 'verdadeiro/falso', sql: 'BOOLEAN' },
+  date:     { icon: 'file',     label: 'data',             sql: 'DATE' },
+  datetime: { icon: 'file',     label: 'data e hora',      sql: 'TIMESTAMP' },
+}
+
+export default function SchemaEditorPage() {
+  const { token } = useAuth()
+  const router = useRouter()
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [columns, setColumns] = useState<ColumnDef[]>([
+    { id: 1, name: 'id', data_type: 'integer', is_primary: true, is_nullable: false, is_unique: true, is_fk: false, fk_table: '', fk_column: '' },
+    { id: 2, name: 'title', data_type: 'string', is_primary: false, is_nullable: false, is_unique: false, is_fk: false, fk_table: '', fk_column: '' },
+  ])
+  const [selectedId, setSelectedId] = useState<number>(2)
+  const [available, setAvailable] = useState<ExistingTable[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const [err, setErr] = useState('')
+
+  const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
   useEffect(() => {
-    const headers = { Authorization: `Bearer ${token}` }
-    fetch(`${API}/api/database-groups`, { headers })
-      .then(r => r.json()).then(setGroups).catch(console.error)
-    fetch(`${API}/tables/`, { headers })
-      .then(r => r.json()).then(setAvailableTables).catch(console.error)
+    fetch(`${API}/tables/`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then((d) => setAvailable(Array.isArray(d) ? d : []))
+      .catch(() => {})
   }, [API, token])
 
+  const selected = columns.find(c => c.id === selectedId) || null
+
   const addColumn = () => {
+    const nid = columns.length ? Math.max(...columns.map(c => c.id)) + 1 : 1
     setColumns([...columns, {
-      id: Date.now(), name: "", data_type: "String",
-      is_nullable: true, is_unique: false,
-      is_fk: false, fk_table: "", fk_column: ""
+      id: nid, name: 'nova_coluna', data_type: 'string',
+      is_primary: false, is_nullable: true, is_unique: false,
+      is_fk: false, fk_table: '', fk_column: '',
     }])
+    setSelectedId(nid)
   }
 
   const removeColumn = (id: number) => {
-    setColumns(columns.filter(col => col.id !== id))
+    setColumns(cs => cs.filter(c => c.id !== id))
+    if (selectedId === id && columns.length > 1) setSelectedId(columns[0].id)
   }
 
-  const updateColumn = (id: number, field: string, value: any) => {
-    setColumns(columns.map(col => col.id === id ? { ...col, [field]: value } : col))
+  const updateColumn = (id: number, patch: Partial<ColumnDef>) => {
+    setColumns(cs => cs.map(c => c.id === id ? { ...c, ...patch } : c))
   }
 
   const handleSave = async () => {
-    if (!name.trim()) return setError("Table name is required")
-    setIsSubmitting(true)
-    setError("")
-
+    if (!name.trim()) return setErr('Dê um nome à tabela.')
+    setErr(''); setSubmitting(true)
     try {
-      const payload: any = {
-        name: name.toLowerCase(),
+      const payload = {
+        name: name.toLowerCase().replace(/\s+/g, '_'),
         description,
-        group_id: groupId,
-        columns: columns.map((c) => ({
+        columns: columns.map(c => ({
           name: c.name.toLowerCase().replace(/\s+/g, '_'),
-          data_type: c.data_type,
+          data_type: c.data_type === 'string' ? 'String'
+            : c.data_type === 'integer' ? 'Integer'
+            : c.data_type === 'float' ? 'Float'
+            : c.data_type === 'boolean' ? 'Boolean'
+            : c.data_type === 'datetime' ? 'DateTime'
+            : c.data_type === 'date' ? 'Date'
+            : 'Text',
+          is_primary: c.is_primary,
           is_nullable: c.is_nullable,
           is_unique: c.is_unique,
-          is_primary: false,
-          fk_table: c.is_fk && c.fk_table ? c.fk_table : null,
-          fk_column: c.is_fk && c.fk_column ? c.fk_column : null,
-        }))
+        })),
       }
-
       const res = await fetch(`${API}/tables/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload)
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
       })
-
       if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.detail || "Failed to create table")
+        const e = await res.json().catch(() => ({}))
+        throw new Error(e.detail || 'Falha ao criar tabela.')
       }
 
-      router.push("/admin/tables")
-      router.refresh()
-    } catch (err: any) {
-      setError(err.message)
+      // Create FK relations
+      for (const c of columns) {
+        if (c.is_fk && c.fk_table && c.fk_column) {
+          await fetch(`${API}/api/relations`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              from_table_name: payload.name,
+              from_column_name: c.name.toLowerCase().replace(/\s+/g, '_'),
+              to_table_name: c.fk_table,
+              to_column_name: c.fk_column,
+              relation_type: 'many_to_one',
+            }),
+          }).catch(() => {})
+        }
+      }
+
+      router.push('/admin/tables')
+    } catch (e) {
+      setErr((e as Error).message)
     } finally {
-      setIsSubmitting(false)
+      setSubmitting(false)
     }
   }
 
+  // Generate SQL preview
+  const sqlPreview = `CREATE TABLE ${name || 'sua_tabela'} (\n${columns.map(c => {
+    const meta = TYPE_META[c.data_type]
+    let line = `  ${c.name.padEnd(16)} ${meta.sql}`
+    if (!c.is_nullable) line += ' NOT NULL'
+    if (c.is_unique) line += ' UNIQUE'
+    if (c.is_primary) line += ' PRIMARY KEY'
+    return line
+  }).join(',\n')}\n);${columns.filter(c => c.is_fk && c.fk_table).map(c =>
+    `\n\nALTER TABLE ${name || 'sua_tabela'}\n  ADD CONSTRAINT fk_${c.name}\n  FOREIGN KEY (${c.name}) REFERENCES ${c.fk_table}(${c.fk_column});`
+  ).join('')}`
+
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center gap-4">
-        <Link href="/admin/tables" className="p-2 bg-neutral-900 border border-neutral-800 rounded-lg hover:bg-neutral-800 transition-colors">
-          <ArrowLeft className="w-5 h-5 text-neutral-400" />
-        </Link>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Create Data Model</h1>
-          <p className="text-neutral-400 mt-1">Design a new dynamically generated table in your database.</p>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 80px)' }}>
+      {/* Header */}
+      <header style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--fg-muted)' }}>
+          <Link href="/admin/tables" style={{ color: 'var(--accent-text)', textDecoration: 'none' }}>
+            Tabelas
+          </Link>
+          <span>/</span>
+          <span>Nova</span>
         </div>
-      </div>
+        <Eyebrow num={3}>Editor de schema</Eyebrow>
+        <h1 style={{
+          fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 400,
+          letterSpacing: '-0.02em', marginTop: 12, fontStyle: 'italic',
+        }}>
+          {name || 'sua nova tabela'}
+        </h1>
+        <p style={{
+          fontFamily: 'var(--font-display)', fontSize: 'var(--text-md)', color: 'var(--fg-secondary)',
+          maxWidth: 640, marginTop: 12, lineHeight: 1.5,
+        }}>
+          Esta é a forma da tabela. Defina colunas, tipos e relações antes de povoar.
+        </p>
+      </header>
 
-      {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl">{error}</div>
-      )}
+      <Hairline strong my={4} />
 
-      <div className="bg-neutral-900/50 border border-neutral-800 rounded-2xl p-6 sm:p-8 space-y-8">
-        {/* Table Info */}
-        <div className="space-y-4">
-          <h3 className="text-xl font-semibold">Table Info</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-neutral-400">Table Name (plural)</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)}
-                placeholder="e.g. products, events"
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-2.5 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-neutral-400">Description (optional)</label>
-              <input type="text" value={description} onChange={e => setDescription(e.target.value)}
-                placeholder="What is this table for?"
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-2.5 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all" />
-            </div>
+      {/* 3-col layout */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '320px 1fr 340px', gap: 24,
+        marginTop: 24, flex: 1, alignItems: 'flex-start',
+      }}>
+        {/* LEFT — column list */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+            <Eyebrow>Colunas · {columns.length}</Eyebrow>
           </div>
-          {/* Group selector */}
-          {groups.length > 0 && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-neutral-400">Database Group (optional)</label>
-              <select value={groupId ?? ""} onChange={e => setGroupId(e.target.value ? Number(e.target.value) : null)}
-                className="bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-all">
-                <option value="">No group</option>
-                {groups.map((g: any) => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </select>
+          <div style={{
+            border: '1px solid var(--rule)', borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-elevated)', overflow: 'hidden',
+          }}>
+            {columns.map((c, i) => {
+              const active = selectedId === c.id
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setSelectedId(c.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    width: '100%', padding: '12px 14px', textAlign: 'left', cursor: 'pointer',
+                    background: active ? 'var(--accent-subtle)' : 'transparent',
+                    borderLeft: `3px solid ${active ? 'var(--accent)' : 'transparent'}`,
+                    borderTop: 0, borderRight: 0,
+                    borderBottom: i < columns.length - 1 ? '1px solid var(--rule-faint)' : 0,
+                  }}
+                >
+                  <SectionNum>{String(i + 1).padStart(2, '0')}</SectionNum>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontFamily: 'var(--font-mono)', fontSize: 13,
+                      color: 'var(--fg-primary)', overflow: 'hidden',
+                      textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {c.name || '—'}
+                    </div>
+                    <div style={{
+                      fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 12,
+                      color: 'var(--fg-muted)', marginTop: 2,
+                    }}>
+                      {TYPE_META[c.data_type].label}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end' }}>
+                    {c.is_primary && <Pill tone="accent">PK</Pill>}
+                    {c.is_unique && !c.is_primary && <Pill tone="muted">UNIQ</Pill>}
+                    {c.is_fk && <Pill tone="warn" dot>FK</Pill>}
+                    {c.is_nullable && <Pill tone="muted">NULL</Pill>}
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removeColumn(c.id) }}
+                    style={{ background: 'transparent', border: 0, cursor: 'pointer', color: 'var(--fg-muted)', padding: 4, display: 'flex' }}
+                  >
+                    <Icon name="close" size={14} />
+                  </button>
+                </button>
+              )
+            })}
+          </div>
+
+          <Button variant="ghost" size="sm" icon="plus" onClick={addColumn} style={{ marginTop: 12 }}>
+            Adicionar coluna
+          </Button>
+        </div>
+
+        {/* CENTER — table form + SQL preview */}
+        <div>
+          <Card>
+            <Eyebrow style={{ marginBottom: 14 }}>Sobre a tabela</Eyebrow>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
+              <Field label="Nome da tabela (snake_case)">
+                <Input value={name} onChange={e => setName(e.target.value)} placeholder="ex.: produtos, eventos" mono />
+              </Field>
+              <Field label="Descrição (opcional)">
+                <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Pra que serve esta tabela?" />
+              </Field>
+            </div>
+          </Card>
+
+          <div style={{ marginTop: 24 }}>
+            <Eyebrow accent style={{ marginBottom: 10 }}>SQL gerado · preview</Eyebrow>
+            <Card style={{ background: 'var(--bg-sunken)', borderLeft: '3px solid var(--accent)' }}>
+              <pre style={{
+                fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.7,
+                color: 'var(--fg-secondary)', margin: 0, whiteSpace: 'pre-wrap',
+              }}>
+                {sqlPreview}
+              </pre>
+            </Card>
+          </div>
+
+          {err && (
+            <div style={{
+              marginTop: 16, padding: 14, background: 'var(--danger-bg)',
+              border: '1px solid color-mix(in srgb, var(--danger) 25%, transparent)',
+              borderRadius: 'var(--radius-md)', color: 'var(--danger)',
+              fontFamily: 'var(--font-mono)', fontSize: 12,
+            }}>
+              {err}
             </div>
           )}
         </div>
 
-        {/* Columns */}
-        <div className="space-y-4 pt-6 border-t border-neutral-800">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xl font-semibold">Columns Schema</h3>
-            <button onClick={addColumn} className="flex items-center gap-2 text-sm text-indigo-400 hover:text-indigo-300 transition-colors">
-              <Plus className="w-4 h-4" /> Add Column
-            </button>
-          </div>
+        {/* RIGHT — inspector */}
+        <div>
+          <Eyebrow style={{ marginBottom: 12 }}>Inspetor</Eyebrow>
+          {selected ? (
+            <Card>
+              <SectionNum>{`#${selected.id}`}</SectionNum>
+              <h3 style={{
+                fontFamily: 'var(--font-display)', fontSize: 'var(--text-xl)', fontWeight: 400,
+                margin: '6px 0 16px', fontStyle: 'italic',
+              }}>
+                {selected.name || '—'}
+              </h3>
 
-          <div className="space-y-3">
-            {columns.map((col, index) => (
-              <div key={col.id} className="flex flex-col gap-3 p-4 bg-neutral-950 border border-neutral-800 rounded-xl relative group">
-                <div className="absolute -left-3 top-4 w-6 h-6 bg-neutral-800 rounded-full flex items-center justify-center text-xs text-neutral-400 font-mono border border-neutral-700">
-                  {index + 1}
-                </div>
+              <Field label="Nome">
+                <Input value={selected.name} mono onChange={e => updateColumn(selected.id, { name: e.target.value })} />
+              </Field>
 
-                {/* Row 1: name + type + checkboxes + delete */}
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="flex-1 space-y-2">
-                    <label className="text-xs text-neutral-500 uppercase tracking-wider">Column Name</label>
-                    <input type="text" value={col.name} onChange={e => updateColumn(col.id, "name", e.target.value)}
-                      placeholder="field_name"
-                      className="w-full bg-transparent border-b border-neutral-800 focus:border-indigo-500 pb-1 outline-none font-mono text-sm" />
-                  </div>
-                  <div className="w-40 space-y-2">
-                    <label className="text-xs text-neutral-500 uppercase tracking-wider">Type</label>
-                    <select value={col.data_type} onChange={e => updateColumn(col.id, "data_type", e.target.value)}
-                      className="w-full bg-transparent border-b border-neutral-800 focus:border-indigo-500 pb-1 outline-none text-sm cursor-pointer">
-                      <option value="String">String (Text)</option>
-                      <option value="Integer">Integer</option>
-                      <option value="Float">Float</option>
-                      <option value="Boolean">Boolean</option>
-                      <option value="DateTime">DateTime</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-6 pt-6 px-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={col.is_nullable} onChange={e => updateColumn(col.id, "is_nullable", e.target.checked)}
-                        className="accent-indigo-500 w-4 h-4" />
-                      <span className="text-sm text-neutral-400">Nullable</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={col.is_unique} onChange={e => updateColumn(col.id, "is_unique", e.target.checked)}
-                        className="accent-indigo-500 w-4 h-4" />
-                      <span className="text-sm text-neutral-400">Unique</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={col.is_fk} onChange={e => updateColumn(col.id, "is_fk", e.target.checked)}
-                        className="accent-amber-500 w-4 h-4" />
-                      <span className="text-sm text-amber-400 flex items-center gap-1">
-                        <Link2 className="w-3 h-3" /> FK
-                      </span>
-                    </label>
-                    <button onClick={() => removeColumn(col.id)}
-                      className="text-neutral-500 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-neutral-800">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Row 2: FK selectors (only when is_fk is on) */}
-                {col.is_fk && (
-                  <div className="flex flex-col sm:flex-row gap-4 pl-0 pt-2 border-t border-amber-500/20">
-                    <div className="flex-1 space-y-1">
-                      <label className="text-xs text-amber-400 uppercase tracking-wider">References Table</label>
-                      <select value={col.fk_table} onChange={e => updateColumn(col.id, "fk_table", e.target.value)}
-                        className="w-full bg-neutral-900 border border-amber-500/30 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500 transition-all">
-                        <option value="">Select table…</option>
-                        {availableTables.map((t: any) => (
-                          <option key={t.id} value={t.name}>{t.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex-1 space-y-1">
-                      <label className="text-xs text-amber-400 uppercase tracking-wider">References Column</label>
-                      <select value={col.fk_column} onChange={e => updateColumn(col.id, "fk_column", e.target.value)}
-                        className="w-full bg-neutral-900 border border-amber-500/30 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500 transition-all">
-                        <option value="">Select column…</option>
-                        {col.fk_table && availableTables
-                          .find((t: any) => t.name === col.fk_table)
-                          ?.columns?.map((c: any) => (
-                            <option key={c.id} value={c.name}>{c.name} ({c.data_type})</option>
-                          ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
+              <div style={{ marginTop: 14 }}>
+                <Field label="Tipo">
+                  <Select value={selected.data_type} onChange={e => updateColumn(selected.id, { data_type: e.target.value as DataType })}>
+                    {(Object.keys(TYPE_META) as DataType[]).map(k => (
+                      <option key={k} value={k}>{TYPE_META[k].label} ({k})</option>
+                    ))}
+                  </Select>
+                </Field>
               </div>
-            ))}
-          </div>
-        </div>
 
-        <div className="flex justify-end pt-6">
-          <button disabled={isSubmitting} onClick={handleSave}
-            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-lg font-medium transition-colors">
-            {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-            {isSubmitting ? "Generating Schema..." : "Create Table"}
-          </button>
+              <Hairline my={18} />
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <Toggle label="Chave primária" hint="identifica o registro"
+                  checked={selected.is_primary}
+                  onChange={() => updateColumn(selected.id, { is_primary: !selected.is_primary })} />
+                <Toggle label="Aceita nulo" hint="pode ficar vazio"
+                  checked={selected.is_nullable}
+                  onChange={() => updateColumn(selected.id, { is_nullable: !selected.is_nullable })} />
+                <Toggle label="Único" hint="sem duplicatas"
+                  checked={selected.is_unique}
+                  onChange={() => updateColumn(selected.id, { is_unique: !selected.is_unique })} />
+                <Toggle label="Foreign key" hint="aponta pra outra tabela"
+                  checked={selected.is_fk}
+                  onChange={() => updateColumn(selected.id, { is_fk: !selected.is_fk })} />
+              </div>
+
+              {selected.is_fk && (
+                <>
+                  <Hairline my={18} />
+                  <Eyebrow accent style={{ marginBottom: 10 }}>Referência</Eyebrow>
+                  <Field label="Tabela alvo">
+                    <Select value={selected.fk_table} onChange={e => updateColumn(selected.id, { fk_table: e.target.value, fk_column: '' })}>
+                      <option value="">— escolha —</option>
+                      {available.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                    </Select>
+                  </Field>
+                  {selected.fk_table && (
+                    <div style={{ marginTop: 14 }}>
+                      <Field label="Coluna alvo">
+                        <Select value={selected.fk_column} onChange={e => updateColumn(selected.id, { fk_column: e.target.value })}>
+                          <option value="">— escolha —</option>
+                          {available.find(t => t.name === selected.fk_table)?.columns?.map(c => (
+                            <option key={c.name} value={c.name}>{c.name} ({c.data_type})</option>
+                          ))}
+                        </Select>
+                      </Field>
+                    </div>
+                  )}
+                </>
+              )}
+            </Card>
+          ) : (
+            <Card>
+              <p style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 14, color: 'var(--fg-muted)' }}>
+                Selecione uma coluna na lista para editar suas propriedades.
+              </p>
+            </Card>
+          )}
         </div>
       </div>
+
+      {/* Footer */}
+      <div style={{
+        marginTop: 32, paddingTop: 20, borderTop: '1px solid var(--rule)',
+        display: 'flex', gap: 8, justifyContent: 'flex-end',
+      }}>
+        <Button variant="ghost" onClick={() => router.push('/admin/tables')}>Cancelar</Button>
+        <Button variant="primary" size="lg" icon="save" onClick={handleSave} disabled={submitting}>
+          {submitting ? 'Criando…' : 'Criar tabela'}
+        </Button>
+      </div>
     </div>
+  )
+}
+
+function Toggle({ label, hint, checked, onChange }: { label: string; hint?: string; checked: boolean; onChange: () => void }) {
+  return (
+    <button
+      onClick={onChange}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12, width: '100%',
+        background: 'transparent', border: 0, cursor: 'pointer', textAlign: 'left', padding: 0,
+      }}
+    >
+      <div style={{
+        width: 32, height: 18, borderRadius: 999, position: 'relative', flexShrink: 0,
+        background: checked ? 'var(--accent)' : 'var(--bg-sunken)',
+        border: '1px solid var(--rule)', transition: 'background 0.15s',
+      }}>
+        <div style={{
+          width: 14, height: 14, borderRadius: '50%', background: 'var(--bg-elevated)',
+          position: 'absolute', top: 1, left: checked ? 16 : 1, transition: 'left 0.15s',
+        }} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--fg-primary)', fontWeight: 500 }}>
+          {label}
+        </div>
+        {hint && (
+          <div style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 12, color: 'var(--fg-muted)', marginTop: 2 }}>
+            {hint}
+          </div>
+        )}
+      </div>
+    </button>
   )
 }

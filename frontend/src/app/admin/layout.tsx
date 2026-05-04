@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/components/AuthContext'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
+import TweaksPanel from '@/components/TweaksPanel'
 import { Eyebrow, Icon, Pill, type IconName } from '@/components/ui'
 
 interface WorkspaceMe {
@@ -256,6 +257,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </main>
 
       <ThemeSwitcher />
+      <TweaksPanel />
     </div>
   )
 }
