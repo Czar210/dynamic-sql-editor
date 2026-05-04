@@ -124,14 +124,14 @@
 **Objetivo:** elevar todas as 13 telas redesenhadas (Fases 2 + 3) ao nível de fidelidade visual do protótipo handoff. Sem mudar wiring, sem mudar estrutura — só refinar densidade, ornamentos, microtipografia, hover/focus states, e aplicar texturas.
 
 ### Refinamentos transversais
-- [ ] **T4.1** — Aplicar `--paper-grain` SVG noise nas surfaces principais (body, masthead). Usar `.paper-texture` utility do tokens.css.
-- [ ] **T4.2** — Microtipografia Fraunces: aplicar `font-variation-settings: "opsz" 144, "SOFT" 50` em headings display; itálicos editoriais em subheadings.
-- [ ] **T4.3** — Decorações: M-monogram (`assets/m-monogram.svg`) e Owl glyph ASCII em corners onde o protótipo coloca.
-- [ ] **T4.4** — Drop caps em abstracts longos (primeira letra Fraunces gigante, 3 linhas de altura).
-- [ ] **T4.5** — Tabular nums + ss01 feature em todos os números de dados.
-- [ ] **T4.6** — Hover/focus states refinados com `--ease-editorial` (cubic-bezier slow start). Sem fade abrupto.
+- [x] **T4.1** — Aplicar `--paper-grain` SVG noise nas surfaces principais (body, masthead). Usar `.paper-texture` utility do tokens.css.
+- [x] **T4.2** — Microtipografia Fraunces: aplicar `font-variation-settings: "opsz" 144, "SOFT" 50` em headings display; itálicos editoriais em subheadings.
+- [x] **T4.3** — Decorações: M-monogram (`assets/m-monogram.svg`) e Owl glyph ASCII em corners onde o protótipo coloca.
+- [x] **T4.4** — Drop caps em abstracts longos (primeira letra Fraunces gigante, 3 linhas de altura).
+- [x] **T4.5** — Tabular nums + ss01 feature em todos os números de dados.
+- [x] **T4.6** — Hover/focus states refinados com `--ease-editorial` (cubic-bezier slow start). Sem fade abrupto.
 - [ ] **T4.7** — Densidade calibrada: comparar lado-a-lado com screenshots do protótipo, ajustar paddings/gaps milímetro-a-milímetro.
-- [ ] **T4.8** — Remover shim `--color-*` legacy do globals.css (todas as telas devem ter migrado pros tokens novos até aqui).
+- [x] **T4.8** — Remover shim `--color-*` legacy do globals.css (todas as telas devem ter migrado pros tokens novos até aqui).
 
 ### Polish por tela (uma sub-task por tela, comparar com prototype JSX correspondente)
 - [ ] **T4.9** — Login (`/login`)

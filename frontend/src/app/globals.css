@@ -74,6 +74,8 @@
   --shadow-sm:  0 1px 2px rgba(0,0,0,.06);
   --shadow-md:  0 2px 8px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
   --shadow-lg:  0 8px 24px rgba(0,0,0,.10), 0 2px 4px rgba(0,0,0,.04);
+
+  --paper-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.13  0 0 0 0 0.16  0 0 0 0 0.26  0 0 0 0.045 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
 /* ─── DARK MODE ────────────────────────────────────────────────────────────── */
@@ -98,6 +100,8 @@
   --shadow-sm:  0 1px 2px rgba(0,0,0,.30);
   --shadow-md:  0 2px 8px rgba(0,0,0,.40), 0 1px 2px rgba(0,0,0,.20);
   --shadow-lg:  0 8px 24px rgba(0,0,0,.50), 0 2px 4px rgba(0,0,0,.20);
+
+  --paper-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.98  0 0 0 0 0.94  0 0 0 0 0.85  0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
 /* ─── ACCENT VARIANTS ──────────────────────────────────────────────────────── */
@@ -186,6 +190,20 @@
   --space-10: 40px;
   --space-12: 48px;
   --space-16: 64px;
+
+  --tracking-display: -0.025em;
+  --tracking-h1:      -0.018em;
+  --tracking-h2:      -0.012em;
+  --tracking-tight:   -0.005em;
+  --tracking-caps:     0.08em;
+  --tracking-eyebrow:  0.18em;
+
+  --ease-editorial: cubic-bezier(0.32, 0.72, 0.0, 1.0);
+  --ease-paper:     cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --duration-fast:  140ms;
+  --duration-base:  240ms;
+  --duration-slow:  400ms;
+  --duration-page:  600ms;
 }
 
 /* ─── BASE ELEMENT STYLES ──────────────────────────────────────────────────── */
@@ -201,24 +219,55 @@ html {
 
 body {
   font-family: var(--font-sans);
-  background: var(--bg-page);
+  background-color: var(--bg-page);
+  background-image: var(--paper-grain);
+  background-blend-mode: multiply;
   color: var(--fg-primary);
-  transition: background-color 0.2s ease, color 0.2s ease;
+  font-feature-settings: "ss01", "ss02", "kern", "liga", "calt";
+  text-rendering: optimizeLegibility;
+  transition: background-color var(--duration-base) var(--ease-paper),
+              color var(--duration-base) var(--ease-paper);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+[data-theme="dark"] body {
+  background-blend-mode: screen;
+}
 
-h1, h2, h3, h4, h5, h6 {
+h1, h2, h3 {
   font-family: var(--font-display);
+  font-weight: 400;
+  font-variation-settings: "opsz" 144, "SOFT" 50;
+  color: var(--fg-primary);
+  margin: 0;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: var(--text-4xl);
   line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-h1);
+}
+h2 {
+  font-size: var(--text-3xl);
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-h2);
+}
+h3 {
+  font-size: var(--text-2xl);
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-tight);
+}
+
+h4, h5, h6 {
+  font-family: var(--font-sans);
+  line-height: var(--leading-snug);
   color: var(--fg-primary);
   font-weight: 600;
+  letter-spacing: var(--tracking-tight);
   margin: 0;
 }
 
-h1 { font-size: var(--text-4xl); }
-h2 { font-size: var(--text-3xl); }
-h3 { font-size: var(--text-2xl); }
 h4 { font-size: var(--text-xl); }
 h5 { font-size: var(--text-lg); }
 h6 { font-size: var(--text-md); }
@@ -227,11 +276,13 @@ p { margin: 0; }
 
 a {
   color: var(--accent-text);
-  text-decoration: none;
-}
-a:hover {
   text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, var(--accent-text) 35%, transparent);
+  transition: text-decoration-color var(--duration-fast) var(--ease-editorial);
 }
+a:hover { text-decoration-color: var(--accent-text); }
 
 hr {
   border: none;
@@ -269,38 +320,102 @@ code, pre, kbd {
 
 .border-rule  { border-color: var(--rule); }
 
-/* ─── LEGACY COMPAT (M5 transition) ────────────────────────────────────────
-   Pages que ainda não foram redesenhadas (Fase 3) usam --color-* como triplets HSL
-   wrapped em hsl(). Mantemos esses aliases definidos aqui para que renderizem
-   com cor enquanto a Fase 3 não os reescreve. Remover quando todas as telas
-   estiverem usando os tokens novos diretamente (var(--bg-page), etc.). */
-:root,
-[data-theme="light"] {
-  --color-bg:         0, 0%, 97%;
-  --color-bg-card:    0, 0%, 100%;
-  --color-bg-surface: 0, 0%, 93%;
-  --color-text:       0, 0%, 8%;
-  --color-text-muted: 0, 0%, 40%;
-  --color-border:     0, 0%, 83%;
-  --color-primary:    43, 70%, 55%;
+/* Tabular nums + ss01 (T4.5) */
+.numeric, td.numeric, .data, .meta-number {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum", "ss01";
 }
-[data-theme="dark"] {
-  --color-bg:         0, 0%, 5%;
-  --color-bg-card:    0, 0%, 11%;
-  --color-bg-surface: 0, 0%, 7%;
-  --color-text:       0, 0%, 97%;
-  --color-text-muted: 0, 0%, 60%;
-  --color-border:     0, 0%, 16%;
-  --color-primary:    43, 80%, 65%;
+
+/* Editorial quote — italic display serif */
+.editorial-quote {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--text-2xl);
+  line-height: var(--leading-snug);
+  font-variation-settings: "opsz" 144, "SOFT" 100;
+  color: var(--fg-primary);
+  text-wrap: balance;
 }
-[data-accent="goldenrod"] { --color-primary: 43, 70%, 55%; }
-[data-accent="sage"]      { --color-primary: 88, 16%, 45%; }
-[data-accent="ruby"]      { --color-primary: 343, 50%, 35%; }
-[data-accent="nectar"]    { --color-primary: 16, 75%, 44%; }
-[data-theme="dark"][data-accent="goldenrod"] { --color-primary: 41, 80%, 68%; }
-[data-theme="dark"][data-accent="sage"]      { --color-primary: 88, 18%, 65%; }
-[data-theme="dark"][data-accent="ruby"]      { --color-primary: 343, 35%, 53%; }
-[data-theme="dark"][data-accent="nectar"]    { --color-primary: 16, 75%, 60%; }
+
+/* Eyebrow — tiny mono CAPS label */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--fg-muted);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+/* Section number marker */
+.section-num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent-text);
+  letter-spacing: var(--tracking-caps);
+}
+
+/* Vertical text — chinese-modern editorial flourish */
+.vertical-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+/* M monogram */
+.glyph-m {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-variation-settings: "opsz" 144, "SOFT" 100, "wght" 400;
+}
+
+/* Drop cap (T4.4) — apply on first paragraph of long-form abstracts */
+.drop-cap::first-letter {
+  font-family: var(--font-display);
+  font-size: 4em;
+  line-height: 0.85;
+  float: left;
+  margin: 0.05em 0.08em 0 0;
+  font-weight: 400;
+  font-variation-settings: "opsz" 144, "SOFT" 100;
+  color: var(--accent-text);
+}
+
+/* Editorial divider — em-dash style */
+.rule-em::before {
+  content: "—";
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--fg-muted);
+}
+
+/* Paper texture overlay (T4.1) — apply to large surfaces only */
+.paper-texture {
+  position: relative;
+}
+.paper-texture::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--paper-grain);
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 0;
+}
+[data-theme="dark"] .paper-texture::after {
+  mix-blend-mode: screen;
+  opacity: 0.35;
+}
+.paper-texture > * { position: relative; z-index: 1; }
 
 /* ─── TAILWIND 4 INLINE THEME BRIDGE ──────────────────────────────────────── */
 @theme inline {
