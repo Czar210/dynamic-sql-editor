@@ -1,8 +1,8 @@
 "use client"
-import { useEffect, useState, use } from "react"
+import { useEffect, useState, use, useMemo } from "react"
 import Link from "next/link"
-import { ArrowLeft, Save, Plus, Pencil, Trash, X } from "lucide-react"
 import { useAuth } from "@/components/AuthContext"
+import { Button, Card, Eyebrow, Hairline, Icon, Input, Pill, Select } from "@/components/ui"
 
 interface RelationInfo {
   id: number
@@ -12,8 +12,15 @@ interface RelationInfo {
   relation_type: string
 }
 
-interface RefData {
-  [toTableName: string]: any[]
+interface RefData { [toTableName: string]: any[] }
+
+type ViewMode = 'dense' | 'cards'
+type Density = 'compact' | 'regular' | 'loose'
+
+const ROW_HEIGHTS: Record<Density, string> = {
+  compact: '32px',
+  regular: '44px',
+  loose: '56px',
 }
 
 export default function DataViewer({ params }: { params: Promise<{ table: string }> }) {
@@ -24,14 +31,31 @@ export default function DataViewer({ params }: { params: Promise<{ table: string
   const [loading, setLoading] = useState(true)
   const [relations, setRelations] = useState<RelationInfo[]>([])
   const [refData, setRefData] = useState<RefData>({})
+  const [search, setSearch] = useState('')
+
+  const [viewMode, setViewMode] = useState<ViewMode>('dense')
+  const [density, setDensity] = useState<Density>('regular')
 
   const [isAdding, setIsAdding] = useState(false)
   const [newRecord, setNewRecord] = useState<any>({})
 
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editData, setEditData] = useState<any>({})
+  const [editingCell, setEditingCell] = useState<{ id: number; col: string } | null>(null)
+  const [editValue, setEditValue] = useState<any>('')
 
   const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
+  // localStorage persistence
+  useEffect(() => {
+    const v = localStorage.getItem(`data-view-${tableName}`) as ViewMode | null
+    if (v === 'dense' || v === 'cards') setViewMode(v)
+    const d = localStorage.getItem('data-density') as Density | null
+    if (d === 'compact' || d === 'regular' || d === 'loose') setDensity(d)
+  }, [tableName])
+
+  const setViewModePersist = (v: ViewMode) => {
+    setViewMode(v)
+    localStorage.setItem(`data-view-${tableName}`, v)
+  }
 
   const fetchRecords = async () => {
     const res = await fetch(`${API}/api/${tableName}`, { headers: { Authorization: `Bearer ${token}` } })
@@ -42,248 +66,506 @@ export default function DataViewer({ params }: { params: Promise<{ table: string
   useEffect(() => {
     const headers = { Authorization: `Bearer ${token}` }
 
-    // Fetch table schema
     fetch(`${API}/tables/`, { headers })
-      .then(res => res.json())
+      .then(r => r.json())
       .then(tables => {
         const tableDef = tables.find((t: any) => t.name === tableName)
         if (tableDef?.columns) setColumns(tableDef.columns)
       })
       .catch(console.error)
 
-    // Fetch records
     fetch(`${API}/api/${tableName}`, { headers })
-      .then(res => res.json())
+      .then(r => r.json())
       .then(data => { setRecords(Array.isArray(data) ? data : []); setLoading(false) })
       .catch(() => setLoading(false))
 
-    // Fetch FK relations for this table
     fetch(`${API}/api/relations/table/${tableName}`, { headers })
-      .then(res => res.ok ? res.json() : [])
+      .then(r => r.ok ? r.json() : [])
       .then(async (rels: RelationInfo[]) => {
         setRelations(rels)
-        // Pre-fetch reference data for each FK target table
         const refMap: RefData = {}
         for (const rel of rels) {
           try {
             const r = await fetch(`${API}/api/${rel.to_table_name}`, { headers })
             if (r.ok) refMap[rel.to_table_name] = await r.json()
-          } catch { /* no ref data available */ }
+          } catch { /* ignore */ }
         }
         setRefData(refMap)
       })
       .catch(console.error)
-  }, [tableName, token, API]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tableName, token, API])
 
-  /** Return the RelationInfo for a column if it is a FK, otherwise null */
-  const getFKRelation = (colName: string): RelationInfo | null =>
+  const getFK = (colName: string): RelationInfo | null =>
     relations.find(r => r.from_column_name === colName) ?? null
 
-  /** Render an input or FK-select for a given column in add/edit mode */
+  const isNumeric = (col: any) => col?.data_type === 'Integer' || col?.data_type === 'Float'
+
   const renderField = (col: any, value: any, onChange: (v: any) => void) => {
-    const fk = getFKRelation(col.name)
+    const fk = getFK(col.name)
     if (fk) {
       const rows = refData[fk.to_table_name] ?? []
-      // Find best label column: first String column that isn't the PK
       const labelCol = rows.length > 0
         ? Object.keys(rows[0]).find(k => k !== fk.to_column_name) ?? fk.to_column_name
         : fk.to_column_name
       return (
-        <select
-          value={value ?? ""}
-          onChange={e => onChange(e.target.value === "" ? null : Number(e.target.value))}
-          className="w-full rounded px-3 py-1.5 focus:outline-none text-sm"
-          style={{ background: 'hsl(var(--color-bg-surface))', border: '1px solid hsl(var(--color-primary) / 0.5)', color: 'hsl(var(--color-text))' }}
+        <Select
+          value={value != null ? String(value) : ''}
+          onChange={e => onChange(e.target.value === '' ? null : Number(e.target.value))}
         >
-          <option value="">— select {fk.to_table_name} —</option>
+          <option value="">— escolha —</option>
           {rows.map((row: any) => (
             <option key={row[fk.to_column_name]} value={row[fk.to_column_name]}>
               {row[fk.to_column_name]} — {row[labelCol]}
             </option>
           ))}
-        </select>
+        </Select>
       )
     }
-
-    if (col.data_type === "Boolean") {
+    if (col.data_type === 'Boolean') {
       return (
-        <input type="checkbox" checked={value || false} onChange={e => onChange(e.target.checked)}
-          className="w-4 h-4" style={{ accentColor: 'hsl(var(--color-primary))' }} />
+        <input
+          type="checkbox"
+          checked={!!value}
+          onChange={e => onChange(e.target.checked)}
+          style={{ width: 16, height: 16, accentColor: 'var(--accent)' }}
+        />
       )
     }
-
     return (
-      <input
-        type={col.data_type === "Integer" || col.data_type === "Float" ? "number" : "text"}
-        value={value ?? ""}
-        onChange={e => onChange(col.data_type === "Integer" ? parseInt(e.target.value) : e.target.value)}
+      <Input
+        type={isNumeric(col) ? 'number' : 'text'}
+        value={value != null ? String(value) : ''}
+        onChange={e => onChange(col.data_type === 'Integer' ? parseInt(e.target.value) : e.target.value)}
         placeholder={col.name}
-        className="w-full rounded px-3 py-1.5 focus:outline-none text-sm"
-        style={{ background: 'hsl(var(--color-bg-surface))', border: '1px solid hsl(var(--color-border))', color: 'hsl(var(--color-text))' }}
       />
     )
   }
 
-  /** Display value for a cell — resolve FK to label if possible */
   const displayValue = (col: any, record: any) => {
     const raw = record[col.name]
-    const fk = getFKRelation(col.name)
+    const fk = getFK(col.name)
     if (fk && raw != null) {
       const rows = refData[fk.to_table_name] ?? []
       const ref = rows.find((r: any) => r[fk.to_column_name] == raw)
       if (ref) {
         const labelCol = Object.keys(ref).find(k => k !== fk.to_column_name) ?? fk.to_column_name
-        return `${ref[labelCol]} (id: ${raw})`
+        return ref[labelCol]
       }
     }
-    if (typeof raw === 'boolean') return raw ? "True" : "False"
-    return String(raw ?? "-")
+    if (typeof raw === 'boolean') return raw ? 'Sim' : 'Não'
+    return raw == null || raw === '' ? '—' : String(raw)
   }
 
   const handleSaveAdd = async () => {
-    try {
-      const res = await fetch(`${API}/api/${tableName}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(newRecord)
-      })
-      if (res.ok) { setIsAdding(false); setNewRecord({}); await fetchRecords() }
-    } catch (err) { console.error(err) }
+    const res = await fetch(`${API}/api/${tableName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(newRecord),
+    })
+    if (res.ok) { setIsAdding(false); setNewRecord({}); await fetchRecords() }
   }
 
-  const handleSaveEdit = async (id: number) => {
-    try {
-      const res = await fetch(`${API}/api/${tableName}/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(editData)
-      })
-      if (res.ok) { setEditingId(null); setEditData({}); await fetchRecords() }
-    } catch (err) { console.error(err) }
+  const startEdit = (id: number, colName: string, current: any) => {
+    setEditingCell({ id, col: colName })
+    setEditValue(current ?? '')
+  }
+
+  const cancelEdit = () => {
+    setEditingCell(null)
+    setEditValue('')
+  }
+
+  const commitEdit = async () => {
+    if (!editingCell) return
+    const { id, col } = editingCell
+    const record = records.find(r => r.id === id)
+    if (!record) return cancelEdit()
+    const colDef = columns.find((c: any) => c.name === col)
+    let v: any = editValue
+    if (colDef?.data_type === 'Integer') v = parseInt(editValue)
+    else if (colDef?.data_type === 'Float') v = parseFloat(editValue)
+    const payload = { ...record, [col]: v }
+    const res = await fetch(`${API}/api/${tableName}/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    })
+    if (res.ok) {
+      cancelEdit()
+      await fetchRecords()
+    }
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Deseja realmente excluir este registro?')) return
-    try {
-      const res = await fetch(`${API}/api/${tableName}/${id}`, {
-        method: "DELETE", headers: { Authorization: `Bearer ${token}` }
-      })
-      if (res.ok) await fetchRecords()
-    } catch (err) { console.error(err) }
+    if (!confirm('Excluir este registro?')) return
+    const res = await fetch(`${API}/api/${tableName}/${id}`, {
+      method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+    })
+    if (res.ok) await fetchRecords()
   }
 
+  const filtered = useMemo(() => {
+    if (!search.trim()) return records
+    const q = search.toLowerCase()
+    return records.filter(r =>
+      Object.values(r).some(v => String(v ?? '').toLowerCase().includes(q))
+    )
+  }, [records, search])
+
+  const rowHeight = ROW_HEIGHTS[density]
+  const containerStyle = { '--row-height': rowHeight } as React.CSSProperties
+
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/admin/tables" className="p-2 rounded-lg transition-all"
-            style={{ background: 'hsl(var(--color-bg-surface))', border: '1px solid hsl(var(--color-border))' }}>
-            <ArrowLeft className="w-5 h-5" style={{ color: 'hsl(var(--color-text-muted))' }} />
+    <div style={{ maxWidth: 1280, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Breadcrumb + masthead */}
+      <header>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--fg-muted)' }}>
+          <Link href="/admin/tables" style={{ color: 'var(--accent-text)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="arrow-left" size={11} /> Tabelas
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight capitalize" style={{ color: 'hsl(var(--color-text))' }}>{tableName}</h1>
-            <p className="mt-1 text-sm" style={{ color: 'hsl(var(--color-text-muted))' }}>Gerencie os dados desta tabela dinâmica.</p>
+          <span>/</span>
+          <span style={{ color: 'var(--fg-secondary)' }}>{tableName}</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h1
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontWeight: 400,
+                fontSize: 40,
+                lineHeight: 1.05,
+                margin: '0 0 10px',
+                letterSpacing: '-0.02em',
+                color: 'var(--fg-primary)',
+              }}
+            >
+              {tableName}
+            </h1>
+            <Eyebrow style={{ fontSize: 10 }}>
+              {records.length.toLocaleString('pt-BR')} REGISTROS · {columns.length} COLUNAS · {relations.length} RELAÇÕES
+            </Eyebrow>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <div
+              style={{
+                display: 'flex',
+                border: '1px solid var(--rule)',
+                borderRadius: 'var(--radius-sm)',
+                overflow: 'hidden',
+              }}
+            >
+              <button
+                onClick={() => setViewModePersist('dense')}
+                title="Denso"
+                style={{
+                  background: viewMode === 'dense' ? 'var(--bg-elevated)' : 'transparent',
+                  color: viewMode === 'dense' ? 'var(--fg-primary)' : 'var(--fg-muted)',
+                  border: 0, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center',
+                }}
+              >
+                <Icon name="table" size={14} />
+              </button>
+              <button
+                onClick={() => setViewModePersist('cards')}
+                title="Cartões"
+                style={{
+                  background: viewMode === 'cards' ? 'var(--bg-elevated)' : 'transparent',
+                  color: viewMode === 'cards' ? 'var(--fg-primary)' : 'var(--fg-muted)',
+                  border: 0, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center',
+                }}
+              >
+                <Icon name="grid" size={14} />
+              </button>
+            </div>
+            <Button variant="primary" icon="plus" onClick={() => setIsAdding(true)}>
+              Novo registro
+            </Button>
           </div>
         </div>
-        <button onClick={() => setIsAdding(true)}
-          className="flex items-center gap-2 px-4 py-2 text-white rounded-lg font-medium text-sm transition-all"
-          style={{ background: 'hsl(var(--color-primary))' }}>
-          <Plus className="w-4 h-4" /> Adicionar Registro
-        </button>
+        <Hairline strong style={{ marginTop: 18 }} />
+      </header>
+
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ flex: 1, maxWidth: 360 }}>
+          <Input
+            mono
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="buscar…"
+            icon="search"
+          />
+        </div>
+        <Button variant="ghost" size="sm" icon="refresh" onClick={fetchRecords}>
+          Recarregar
+        </Button>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', letterSpacing: '0.12em' }}>
+          DENSIDADE · {density.toUpperCase()}
+        </span>
       </div>
 
-      <div className="rounded-2xl overflow-hidden overflow-x-auto"
-        style={{ background: 'hsl(var(--color-bg-card))', border: '1px solid hsl(var(--color-border))' }}>
-        {loading ? (
-          <div className="p-8 text-center" style={{ color: 'hsl(var(--color-text-muted))' }}>Carregando dados...</div>
-        ) : (
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr style={{ background: 'hsl(var(--color-bg-surface))', borderBottom: '1px solid hsl(var(--color-border))' }}>
-                <th className="p-4 text-xs font-semibold uppercase tracking-wider" style={{ color: 'hsl(var(--color-text-muted))' }}>ID</th>
-                {columns.map((c: any) => (
-                  <th key={c.id} className="p-4 text-xs font-semibold uppercase tracking-wider" style={{ color: 'hsl(var(--color-text-muted))' }}>
-                    {c.name}{getFKRelation(c.name) ? ' 🔗' : ''}
-                  </th>
-                ))}
-                <th className="p-4 text-xs font-semibold uppercase tracking-wider text-right" style={{ color: 'hsl(var(--color-text-muted))' }}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* ADD ROW */}
-              {isAdding && (
-                <tr style={{ background: 'hsl(var(--color-primary) / 0.05)' }}>
-                  <td className="p-4"><span className="italic" style={{ color: 'hsl(var(--color-text-muted))' }}>Auto</span></td>
+      {loading ? (
+        <div style={{ padding: 48, textAlign: 'center', color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+          carregando…
+        </div>
+      ) : viewMode === 'dense' ? (
+        <div style={containerStyle}>
+          <div style={{ overflow: 'auto', border: '1px solid var(--rule-faint)', borderRadius: 'var(--radius-sm)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-sans)', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--fg-primary)' }}>
+                  <th style={headStyle('right')}>id</th>
                   {columns.map((c: any) => (
-                    <td key={c.id} className="p-4">
-                      {renderField(c, newRecord[c.name], v => setNewRecord({ ...newRecord, [c.name]: v }))}
-                    </td>
+                    <th key={c.id} style={headStyle(isNumeric(c) ? 'right' : 'left')}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {c.name}
+                        {getFK(c.name) && <Icon name="link" size={10} color="var(--fg-muted)" />}
+                      </span>
+                    </th>
                   ))}
-                  <td className="p-4 w-24 text-right align-middle">
-                    <div className="flex justify-end items-center gap-2">
-                      <button onClick={handleSaveAdd} style={{ color: 'hsl(var(--color-primary))' }}>
-                        <Save className="w-5 h-5" />
-                      </button>
-                      <button onClick={() => setIsAdding(false)} className="text-red-500">
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </td>
+                  <th style={{ ...headStyle('right'), width: 80 }}>ações</th>
                 </tr>
-              )}
+              </thead>
+              <tbody>
+                {isAdding && (
+                  <tr style={{ background: 'var(--accent-subtle)' }}>
+                    <td style={cellStyle('right', 'muted')}>auto</td>
+                    {columns.map((c: any) => (
+                      <td key={c.id} style={cellStyle()}>
+                        {renderField(c, newRecord[c.name], v => setNewRecord({ ...newRecord, [c.name]: v }))}
+                      </td>
+                    ))}
+                    <td style={cellStyle('right')}>
+                      <div style={{ display: 'inline-flex', gap: 6 }}>
+                        <button onClick={handleSaveAdd} title="Salvar" style={iconBtnStyle('var(--ok)')}>
+                          <Icon name="check" size={14} />
+                        </button>
+                        <button onClick={() => { setIsAdding(false); setNewRecord({}) }} title="Cancelar" style={iconBtnStyle('var(--fg-muted)')}>
+                          <Icon name="close" size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
 
-              {records.length === 0 && !isAdding ? (
-                <tr>
-                  <td colSpan={columns.length + 2} className="p-8 text-center" style={{ color: 'hsl(var(--color-text-muted))' }}>
-                    Nenhum registro encontrado em {tableName}.
-                  </td>
-                </tr>
-              ) : (
-                records.map((record: any, i: number) => {
-                  const isEditing = editingId === record.id
-                  return (
-                    <tr key={record.id || i} className="transition-all" style={{ borderBottom: '1px solid hsl(var(--color-border))' }}>
-                      <td className="p-4 text-sm" style={{ color: 'hsl(var(--color-text-muted))' }}>{record.id}</td>
-                      {columns.map((c: any) => (
-                        <td key={c.id} className="p-4 text-sm whitespace-nowrap" style={{ color: 'hsl(var(--color-text))' }}>
-                          {isEditing
-                            ? renderField(c, editData[c.name], v => setEditData({ ...editData, [c.name]: v }))
-                            : displayValue(c, record)
-                          }
-                        </td>
-                      ))}
-                      <td className="p-4 w-24 text-right align-middle">
-                        <div className="flex justify-end items-center gap-2">
-                          {isEditing ? (
-                            <>
-                              <button onClick={() => handleSaveEdit(record.id)} className="text-green-500 hover:text-green-600 transition-colors">
-                                <Save className="w-4 h-4" />
-                              </button>
-                              <button onClick={() => setEditingId(null)} className="text-gray-400">
-                                <X className="w-4 h-4" />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button onClick={() => { setEditingId(record.id); setEditData({ ...record }) }}
-                                style={{ color: 'hsl(var(--color-primary))' }} className="opacity-80 hover:opacity-100 transition-opacity">
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button onClick={() => handleDelete(record.id)} className="text-red-500 opacity-80 hover:opacity-100 transition-opacity">
-                                <Trash className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
+                {filtered.length === 0 && !isAdding ? (
+                  <tr>
+                    <td colSpan={columns.length + 2} style={{ padding: 32, textAlign: 'center', color: 'var(--fg-muted)', fontFamily: 'var(--font-display)', fontStyle: 'italic' }}>
+                      Nenhum registro {search ? 'corresponde à busca' : `em ${tableName}`}.
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map(record => (
+                    <tr key={record.id} style={{ borderTop: '1px solid var(--rule-faint)' }}>
+                      <td style={cellStyle('right', 'muted', true)}>{record.id}</td>
+                      {columns.map((c: any) => {
+                        const fk = getFK(c.name)
+                        const isEditing = editingCell?.id === record.id && editingCell?.col === c.name
+                        return (
+                          <td
+                            key={c.id}
+                            style={cellStyle(isNumeric(c) ? 'right' : 'left', undefined, isNumeric(c))}
+                            onDoubleClick={() => !isEditing && startEdit(record.id, c.name, record[c.name])}
+                          >
+                            {isEditing ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <input
+                                  autoFocus
+                                  value={editValue ?? ''}
+                                  onChange={e => setEditValue(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') commitEdit()
+                                    if (e.key === 'Escape') cancelEdit()
+                                  }}
+                                  style={{
+                                    flex: 1,
+                                    minWidth: 60,
+                                    padding: '2px 6px',
+                                    background: 'var(--accent-subtle)',
+                                    border: '1px solid var(--accent)',
+                                    borderRadius: 'var(--radius-sm)',
+                                    fontFamily: 'var(--font-sans)',
+                                    fontSize: 13,
+                                    color: 'var(--fg-primary)',
+                                    outline: 'none',
+                                  }}
+                                />
+                                <button onClick={commitEdit} style={iconBtnStyle('var(--ok)')} title="Salvar">
+                                  <Icon name="check" size={12} />
+                                </button>
+                                <button onClick={cancelEdit} style={iconBtnStyle('var(--fg-muted)')} title="Cancelar">
+                                  <Icon name="close" size={12} />
+                                </button>
+                              </div>
+                            ) : (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'text' }}>
+                                <span>{displayValue(c, record)}</span>
+                                {fk && (
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      padding: '1px 6px',
+                                      background: 'var(--bg-sunken)',
+                                      color: 'var(--fg-muted)',
+                                      fontFamily: 'var(--font-mono)',
+                                      fontSize: 9,
+                                      letterSpacing: '0.08em',
+                                      textTransform: 'uppercase',
+                                      borderRadius: 'var(--radius-sm)',
+                                    }}
+                                  >
+                                    [{fk.to_table_name}]
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                          </td>
+                        )
+                      })}
+                      <td style={cellStyle('right')}>
+                        <div style={{ display: 'inline-flex', gap: 4 }}>
+                          <button
+                            onClick={() => startEdit(record.id, columns[0]?.name, record[columns[0]?.name])}
+                            style={iconBtnStyle('var(--fg-muted)')}
+                            title="Editar primeira coluna"
+                          >
+                            <Icon name="edit" size={13} />
+                          </button>
+                          <button onClick={() => handleDelete(record.id)} style={iconBtnStyle('var(--danger)')} title="Excluir">
+                            <Icon name="trash" size={13} />
+                          </button>
                         </div>
                       </td>
                     </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        )}
-      </div>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        // CARDS mode
+        <>
+          {isAdding && (
+            <Card>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <Eyebrow accent>novo registro</Eyebrow>
+                {columns.map((c: any) => (
+                  <div key={c.id}>
+                    <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--fg-muted)', marginBottom: 4 }}>
+                      {c.name}
+                    </label>
+                    {renderField(c, newRecord[c.name], v => setNewRecord({ ...newRecord, [c.name]: v }))}
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  <Button variant="primary" onClick={handleSaveAdd}>Salvar</Button>
+                  <Button variant="ghost" onClick={() => { setIsAdding(false); setNewRecord({}) }}>Cancelar</Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {filtered.length === 0 && !isAdding ? (
+            <Card>
+              <p style={{ textAlign: 'center', color: 'var(--fg-muted)', fontFamily: 'var(--font-display)', fontStyle: 'italic', margin: 0, padding: 24 }}>
+                Nenhum registro em {tableName}.
+              </p>
+            </Card>
+          ) : (
+            <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))' }}>
+              {filtered.map(record => {
+                const titleCol = columns[0]
+                const otherCols = columns.slice(1)
+                return (
+                  <Card key={record.id}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                      <Eyebrow style={{ fontSize: 9 }}>id · {String(record.id).padStart(3, '0')}</Eyebrow>
+                      <button onClick={() => handleDelete(record.id)} style={iconBtnStyle('var(--danger)')} title="Excluir">
+                        <Icon name="trash" size={13} />
+                      </button>
+                    </div>
+                    {titleCol && (
+                      <h3
+                        style={{
+                          fontFamily: 'var(--font-display)',
+                          fontStyle: 'italic',
+                          fontSize: 22,
+                          fontWeight: 400,
+                          margin: '0 0 12px',
+                          lineHeight: 1.15,
+                          letterSpacing: '-0.005em',
+                        }}
+                      >
+                        {displayValue(titleCol, record)}
+                      </h3>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {otherCols.map((c: any) => (
+                        <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--fg-muted)' }}>
+                            {c.name}
+                          </span>
+                          <span style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--fg-primary)', textAlign: 'right' }}>
+                            {displayValue(c, record)}
+                            {getFK(c.name) && (
+                              <Pill tone="accent" style={{ marginLeft: 6, fontSize: 9 }}>
+                                {getFK(c.name)?.to_table_name}
+                              </Pill>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
+}
+
+function headStyle(align: 'left' | 'right' = 'left'): React.CSSProperties {
+  return {
+    textAlign: align,
+    padding: '10px 12px',
+    fontFamily: 'var(--font-mono)',
+    fontSize: 10,
+    letterSpacing: '0.14em',
+    textTransform: 'uppercase',
+    color: 'var(--fg-muted)',
+    fontWeight: 500,
+  }
+}
+
+function cellStyle(align: 'left' | 'right' = 'left', tone?: 'muted', tabular?: boolean): React.CSSProperties {
+  return {
+    textAlign: align,
+    padding: '0 12px',
+    height: 'var(--row-height)',
+    color: tone === 'muted' ? 'var(--fg-muted)' : 'var(--fg-primary)',
+    verticalAlign: 'middle',
+    fontVariantNumeric: tabular ? 'tabular-nums' : undefined,
+    fontFamily: tone === 'muted' || tabular ? 'var(--font-mono)' : undefined,
+    fontSize: tone === 'muted' || tabular ? 12 : undefined,
+  }
+}
+
+function iconBtnStyle(color: string): React.CSSProperties {
+  return {
+    background: 'transparent',
+    border: 0,
+    cursor: 'pointer',
+    color,
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: 4,
+    borderRadius: 'var(--radius-sm)',
+  }
 }
