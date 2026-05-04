@@ -4,7 +4,10 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 interface User {
   id: number
   username: string
-  role: string
+  role: 'master' | 'admin' | 'moderator'
+  workspace_name?: string | null
+  workspace_slug?: string | null
+  parent_id?: number | null
 }
 
 interface AuthContextType {
