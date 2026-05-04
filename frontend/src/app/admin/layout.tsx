@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/components/AuthContext'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
 import TweaksPanel from '@/components/TweaksPanel'
-import { Eyebrow, Icon, Pill, type IconName } from '@/components/ui'
+import { Eyebrow, Icon, MMonogram, Pill, type IconName } from '@/components/ui'
 
 interface WorkspaceMe {
   workspace_name?: string | null
@@ -101,17 +101,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }}
       >
         {/* Brand */}
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 22, padding: '0 6px' }}>
-          <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, letterSpacing: '-0.01em', color: 'var(--fg-primary)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22, padding: '0 6px' }}>
+          <MMonogram size={22} color="var(--accent-text)" />
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, letterSpacing: 'var(--tracking-tight)', color: 'var(--fg-primary)' }}>
             Atlas
           </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--fg-muted)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: 'var(--tracking-eyebrow)', textTransform: 'uppercase', color: 'var(--fg-muted)' }}>
             mora · v.1
           </span>
         </div>
 
         {/* Workspace card */}
         <div
+          className="paper-texture"
           style={{
             padding: '12px 14px',
             marginBottom: 22,
@@ -179,7 +181,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                       fontWeight: isActive ? 500 : 400,
                       letterSpacing: '-0.005em',
                       textDecoration: 'none',
-                      transition: 'background 0.15s',
+                      transition: 'background var(--duration-fast) var(--ease-editorial), color var(--duration-fast) var(--ease-editorial)',
                     }}
                   >
                     <Icon name={item.icon} size={15} />

@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { Card, Eyebrow, Hairline, Icon, Input, Pill, SectionNum } from '@/components/ui'
+import { Card, Eyebrow, Hairline, Icon, Input, MMonogram, Pill, SectionNum } from '@/components/ui'
 
 type PublicTable = {
   id: number
@@ -79,31 +79,34 @@ export default function ExplorePage() {
 
       <div style={{ padding: '48px 48px 80px', maxWidth: 1200, margin: '0 auto' }}>
         {/* Hero */}
-        <div style={{ marginBottom: 48 }}>
+        <div className="paper-texture" style={{ marginBottom: 48, position: 'relative', padding: '8px 0' }}>
+          <div style={{ position: 'absolute', top: 0, right: 0, opacity: 0.85 }}>
+            <MMonogram size={64} color="var(--accent-text)" />
+          </div>
           <Eyebrow num={8}>Explore</Eyebrow>
           <h1 style={{
             fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 'var(--text-4xl)',
-            fontWeight: 400, letterSpacing: '-0.025em', marginTop: 16, lineHeight: 1.05,
+            fontWeight: 400, letterSpacing: 'var(--tracking-display)', marginTop: 16, lineHeight: 1.05,
             color: 'var(--fg-primary)',
           }}>
             Mil Atlas, num só lugar.
           </h1>
-          <p style={{
+          <p className="drop-cap" style={{
             fontFamily: 'var(--font-display)', fontSize: 'var(--text-lg)', color: 'var(--fg-secondary)',
-            maxWidth: 640, marginTop: 18, lineHeight: 1.5,
+            maxWidth: 640, marginTop: 18, lineHeight: 1.5, fontStyle: 'italic',
           }}>
-            Procure pelos catálogos públicos. Acervos, federações, cooperativas, edições.
+            Procure pelos catálogos públicos. Acervos, federações, cooperativas, edições — qualquer publicação que se deixe ler.
           </p>
         </div>
 
         {/* Search */}
-        <div style={{ maxWidth: 560, marginBottom: 24 }}>
+        <div style={{ maxWidth: 560, marginBottom: 24, borderBottom: '2px solid var(--rule)' }}>
           <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
             icon="search"
             placeholder="ex.: editora, vinhos, museu, cooperativa…"
-            style={{ padding: '14px 14px 14px 40px', fontSize: 16 }}
+            style={{ padding: '14px 14px 14px 40px', fontSize: 16, border: 'none', background: 'transparent' }}
           />
         </div>
 
@@ -205,7 +208,7 @@ export default function ExplorePage() {
                           <Pill tone="muted">+{(t.columns?.length ?? 0) - 3}</Pill>
                         )}
                       </div>
-                      <div style={{
+                      <div className="numeric" style={{
                         fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)',
                         letterSpacing: '0.04em',
                       }}>

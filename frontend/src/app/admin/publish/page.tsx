@@ -51,7 +51,7 @@ export default function PublishPage() {
               {slug}.atlas
             </span>
           </div>
-          <Card padding={false} style={{ overflow: 'hidden', minHeight: 560 }}>
+          <Card padding={false} style={{ overflow: 'hidden', minHeight: 560, border: '2px solid var(--fg-primary)' }}>
             <div style={{
               padding: '40px 44px', borderBottom: '2px solid var(--fg-primary)',
               background: 'var(--bg-elevated)',
@@ -123,6 +123,7 @@ export default function PublishPage() {
                 style={{
                   borderColor: preset === p.id ? 'var(--accent)' : 'var(--rule)',
                   background: preset === p.id ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+                  transition: 'border-color var(--duration-base) var(--ease-paper), background var(--duration-base) var(--ease-paper)',
                 }}
               >
                 <button
@@ -163,9 +164,10 @@ export default function PublishPage() {
                   padding: '8px 14px', background: 'transparent', cursor: 'pointer',
                   border: 0, borderBottom: `2px solid ${tab === t ? 'var(--accent)' : 'transparent'}`,
                   marginBottom: -1,
-                  fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
+                  fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: 'var(--tracking-eyebrow)',
                   textTransform: 'uppercase',
                   color: tab === t ? 'var(--accent-text)' : 'var(--fg-muted)',
+                  transition: 'color var(--duration-fast) var(--ease-editorial), border-color var(--duration-base) var(--ease-editorial)',
                 }}
               >
                 {t}

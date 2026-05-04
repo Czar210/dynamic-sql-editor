@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/AuthContext"
-import { Button, Card, Eyebrow, Hairline, Icon, Pill, SectionNum } from "@/components/ui"
+import { Button, Card, Eyebrow, Hairline, Icon, MMonogram, Pill, SectionNum } from "@/components/ui"
 
 interface TableMeta {
   row_count: number
@@ -71,7 +71,10 @@ export default function TablesOverview() {
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 32 }}>
       {/* Masthead */}
-      <header>
+      <header className="paper-texture" style={{ position: 'relative', padding: '4px 0' }}>
+        <div style={{ position: 'absolute', top: -4, right: 0, opacity: 0.7 }}>
+          <MMonogram size={48} color="var(--accent-text)" />
+        </div>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, marginBottom: 16 }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <Eyebrow accent style={{ marginBottom: 12 }}>
@@ -84,7 +87,7 @@ export default function TablesOverview() {
                 fontSize: 48,
                 lineHeight: 1.05,
                 margin: 0,
-                letterSpacing: '-0.02em',
+                letterSpacing: 'var(--tracking-h1)',
                 color: 'var(--fg-primary)',
               }}
             >
@@ -247,6 +250,7 @@ function MagazineRow({ n, table, isAdmin, onOpen, onToggle }: RowProps) {
         alignItems: 'center',
         padding: '24px 4px',
         borderBottom: '1px solid var(--rule-faint)',
+        transition: 'background var(--duration-base) var(--ease-editorial)',
       }}
     >
       <SectionNum style={{ fontSize: 18 }}>{String(n).padStart(2, '0')}</SectionNum>
@@ -281,6 +285,7 @@ function MagazineRow({ n, table, isAdmin, onOpen, onToggle }: RowProps) {
           {table.description || '—'}
         </p>
         <div
+          className="numeric"
           style={{
             fontFamily: 'var(--font-mono)',
             fontSize: 10,

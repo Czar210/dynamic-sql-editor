@@ -93,7 +93,7 @@ export default function GroupsPage() {
             <Eyebrow num={9}>{isMod ? 'Capítulos disponíveis' : 'Grupos de tabelas'}</Eyebrow>
             <h1 style={{
               fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 400,
-              letterSpacing: '-0.02em', marginTop: 12, fontStyle: 'italic',
+              letterSpacing: 'var(--tracking-h1)', marginTop: 12, fontStyle: 'italic',
             }}>
               {isMod ? 'Seus capítulos' : 'A organização do acervo'}
             </h1>
@@ -176,7 +176,7 @@ export default function GroupsPage() {
                       </p>
                     )}
                   </div>
-                  <Pill tone="muted">{perms.length} mods</Pill>
+                  <Pill tone="muted"><span className="numeric">{perms.length} mods</span></Pill>
                 </div>
 
                 <Hairline strong />

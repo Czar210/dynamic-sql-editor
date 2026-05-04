@@ -1,7 +1,7 @@
 'use client'
 import { use, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Button, Card, Eyebrow, Hairline, Icon, Input, Pill, SectionNum } from '@/components/ui'
+import { Button, Card, Eyebrow, Hairline, Icon, Input, MMonogram, Pill, SectionNum } from '@/components/ui'
 
 type PublicTable = {
   id: number
@@ -82,34 +82,37 @@ export default function PublicSitePage({ params }: Props) {
       </header>
 
       {/* Hero / masthead */}
-      <section style={{
+      <section className="paper-texture" style={{
         padding: '64px 48px 48px', borderBottom: '2px solid var(--fg-primary)',
-        maxWidth: 1200, margin: '0 auto',
+        maxWidth: 1200, margin: '0 auto', position: 'relative',
       }}>
+        <div style={{ position: 'absolute', top: 32, right: 48, opacity: 0.85 }}>
+          <MMonogram size={72} color="var(--accent-text)" />
+        </div>
         <Eyebrow accent style={{ marginBottom: 18 }}>
           {wsTitle} · edição vigente
         </Eyebrow>
         <h1 style={{
           fontFamily: 'var(--font-display)', fontStyle: 'italic', fontWeight: 400,
-          fontSize: 88, lineHeight: 0.95, letterSpacing: '-0.025em', margin: 0,
+          fontSize: 88, lineHeight: 0.95, letterSpacing: 'var(--tracking-display)', margin: 0,
           color: 'var(--fg-primary)',
         }}>
           {wsTitle}.
         </h1>
-        <p style={{
+        <p className="drop-cap" style={{
           fontFamily: 'var(--font-display)', fontSize: 'var(--text-lg)', color: 'var(--fg-secondary)',
-          maxWidth: 560, marginTop: 24, lineHeight: 1.45,
+          maxWidth: 560, marginTop: 24, lineHeight: 1.5, fontStyle: 'italic',
         }}>
           {FALLBACK_BLURB}
         </p>
 
-        <div style={{ marginTop: 36, maxWidth: 480 }}>
+        <div style={{ marginTop: 36, maxWidth: 480, borderBottom: '2px solid var(--rule-strong, var(--fg-primary))' }}>
           <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
             icon="search"
             placeholder="busque um ensaio, uma seção, um termo…"
-            style={{ padding: '14px 14px 14px 40px', fontSize: 16 }}
+            style={{ padding: '14px 14px 14px 40px', fontSize: 16, border: 'none', background: 'transparent' }}
           />
         </div>
       </section>
@@ -118,7 +121,7 @@ export default function PublicSitePage({ params }: Props) {
       <section style={{ padding: '48px 48px 80px', maxWidth: 1200, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}>
           <Eyebrow>I · Ensaios em destaque</Eyebrow>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', letterSpacing: '0.16em' }}>
+          <span className="numeric" style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', letterSpacing: 'var(--tracking-eyebrow)', textTransform: 'uppercase' }}>
             {filtered.length} {filtered.length === 1 ? 'tabela pública' : 'tabelas públicas'}
           </span>
         </div>
@@ -192,11 +195,11 @@ export default function PublicSitePage({ params }: Props) {
         padding: '20px 48px', background: 'var(--fg-primary)',
         color: 'var(--fg-inverse)', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', opacity: 0.7 }}>
+        <span className="numeric" style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: 'var(--tracking-eyebrow)', textTransform: 'uppercase', opacity: 0.7 }}>
           publicado por atlas · {wsTitle} · CC BY-SA 4.0
         </span>
-        <span style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 14, opacity: 0.85 }}>
-          Mora
+        <span className="glyph-m" style={{ fontSize: 22, opacity: 0.9, color: 'var(--fg-inverse)' }}>
+          M
         </span>
       </footer>
 

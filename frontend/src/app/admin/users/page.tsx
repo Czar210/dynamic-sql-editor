@@ -159,7 +159,7 @@ export default function ModeratorsPage() {
             <Eyebrow num={6}>{mods.length} moderadores · {groups.length} capítulos</Eyebrow>
             <h1 style={{
               fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 400,
-              letterSpacing: '-0.02em', marginTop: 12, fontStyle: 'italic',
+              letterSpacing: 'var(--tracking-h1)', marginTop: 12, fontStyle: 'italic',
             }}>
               Moderadores
             </h1>
@@ -225,6 +225,7 @@ export default function ModeratorsPage() {
                     border: '1px solid var(--rule)',
                     borderLeft: `3px solid ${active ? 'var(--accent)' : 'transparent'}`,
                     borderRadius: 'var(--radius-md)',
+                    transition: 'background var(--duration-base) var(--ease-editorial), border-color var(--duration-base) var(--ease-editorial)',
                   }}
                 >
                   <div style={{
@@ -267,7 +268,7 @@ export default function ModeratorsPage() {
                   <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-xl)', fontWeight: 400, margin: 0 }}>
                     {selected.username}
                   </h2>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)', marginTop: 4 }}>
+                  <div className="numeric" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)', marginTop: 4 }}>
                     @{selected.username} · id {selected.id}
                   </div>
                 </div>

@@ -284,10 +284,10 @@ function Stat({ label, n, tone }: { label: string; n: string; tone: 'ok' | 'acce
       padding: 16, borderRadius: 'var(--radius-md)',
       background: bgMap[tone], border: '1px solid var(--rule-faint)',
     }}>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-2xl)', color: colorMap[tone], lineHeight: 1 }}>
+      <div className="numeric" style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-2xl)', color: colorMap[tone], lineHeight: 1 }}>
         {n}
       </div>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--fg-muted)', marginTop: 6 }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: 'var(--tracking-eyebrow)', textTransform: 'uppercase', color: 'var(--fg-muted)', marginTop: 6 }}>
         {label}
       </div>
     </div>
