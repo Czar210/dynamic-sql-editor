@@ -3,6 +3,7 @@ import { Fraunces, IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google'
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthContext";
 import { ThemeProvider } from "@/components/ThemeContext";
+import { TweaksProvider } from "@/contexts/TweaksContext";
 
 const fraunces = Fraunces({
   subsets: ['latin'],
@@ -46,7 +47,9 @@ export default function RootLayout({
       <body className="antialiased">
         <AuthProvider>
           <ThemeProvider>
-            {children}
+            <TweaksProvider>
+              {children}
+            </TweaksProvider>
           </ThemeProvider>
         </AuthProvider>
       </body>
