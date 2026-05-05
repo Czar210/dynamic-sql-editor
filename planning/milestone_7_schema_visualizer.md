@@ -1,197 +1,95 @@
-# 🧬 Milestone 7 — Schema Visualizer (painelzão ER)
+# 🧬 Milestone 7 — Schema Visualizer
 
-> **Status:** 📋 Proposta — aguardando aprovação do Diretor
-> **Predecessora:** M5 (Atlas Redesign) idealmente fechado pra usar primitivos editoriais.
-> **Alvo de entrega:** ~1-2 semanas
-> **Objetivo:** dar ao admin uma visão **diagramática** de todas as tabelas do workspace e como elas se conectam via foreign keys. Resolver a fadiga mental de "eu tenho 20 tabelas, qual referencia qual?".
+> **Status:** 📋 Proposta
+> **Vem depois de:** M5 fechado, M3 fechado, M6 fechado
+> **Tamanho relativo:** pequeno (menor de Faixa 1)
 
----
-
-## 🎯 Por que estamos fazendo isso
-
-Hoje:
-- Em `/admin/tables/create` cada coluna pode virar FK, mas a relação fica "escondida" no DB
-- A tela de edição mostra FKs como `<select>` mas você não vê o **mapa completo**
-- Em databases com 10+ tabelas, mentalizar conexões via texto é impraticável
-
-Diretor pediu literalmente: *"o projetar já esta ok eu só adicionaria um jeit da pessoa poder ver como as tabelas se conectam e afins sabe um painelzão seria bom"*.
-
-**O que isso entrega:**
-- Diagrama ER (Entity-Relationship) com cada tabela como um node
-- Edges (linhas) entre tabelas representando FKs, com label da coluna
-- Drag-drop pra reorganizar, com auto-layout inicial
-- Click na tabela → abre lateral com detalhes/edição rápida
-- Export como PNG/SVG pra documentação ou apresentações
+Documento de **alinhamento de visão**. Decisões técnicas (qual lib, layout exato, quais interações) são tomadas na implementação.
 
 ---
 
-## 📐 Arquitetura
+## O problema
 
-### Stack proposto
-- **`@xyflow/react`** (anteriormente react-flow) — biblioteca battle-tested pra diagramas interativos
-  - Já usada por Supabase, Stripe, Whimsical
-  - 30+ exemplos de ERD prontos
-  - Custom nodes via React (perfeito pra estilização Mora editorial)
-- **`dagre`** ou **`elk.js`** — auto-layout algorithm (decisão na Fase 1)
-- **`html-to-image`** — export PNG/SVG
+Em databases pequenos (< 5 tabelas), você consegue mentalizar como elas se conectam. Em databases reais (10, 20, 50 tabelas com FKs), isso vira impossível. O admin precisa abrir tabela por tabela, olhar a aba de relações, anotar de cabeça quem aponta pra quem.
 
-### Custom node Mora
-Cada tabela = card editorial com:
-```
-┌─ tenant_5.clientes ─────────────────┐
-│ 03                          PRIVADO │   ← SectionNum + Pill
-├─────────────────────────────────────┤
-│ 🔑 id              INT PRIMARY      │   ← colunas com badges
-│    nome            TEXT             │
-│    email           VARCHAR(120)     │
-│ 🔗 grupo_id        INT → grupos     │   ← FK indicada inline
-│    created_at      DATETIME         │
-└─────────────────────────────────────┘
-   ↓ 12 registros · 5 colunas · 1 FK
-```
+Hoje o sistema **tem** os dados pra desenhar isso (`_relations` desde M2), só falta uma tela que renderize.
 
-Edges:
-- FK = linha sólida com label da coluna
-- Tabelas sem FK = isoladas no canvas
-- Direção: `from_table.column → to_table.column`
-
-### Rota nova
-`/admin/schema` ou `/admin/diagram` — decidir na Fase 0.
-
-### Endpoint reusado
-`GET /tables/` já retorna `columns` + `relations` (via M2 + M5). Não precisa de backend novo.
+Pedido literal do Diretor: *"o projetar já está ok eu só adicionaria um jeito da pessoa poder ver como as tabelas se conectam e afins, sabe um painelzão seria bom"*.
 
 ---
 
-## 🧭 Fases
+## O que essa milestone entrega
 
-### Fase 0 — Prep + decisão de stack (1 dia)
-- [ ] Spike: testar `@xyflow/react` + `dagre` em sandbox
-- [ ] Validar que custom node Mora cabe no estilo editorial (sem quebrar layout dos primitivos)
-- [ ] Definir rota: `/admin/schema` (mais descritivo)
-- [ ] Adicionar `@xyflow/react` + `dagre` ao `frontend/package.json`
+Uma rota `/admin/schema` (ou nome similar) que mostra:
 
-### Fase 1 — Renderização básica (2-3 dias)
-- [ ] Criar `frontend/src/app/admin/schema/page.tsx`
-- [ ] Fetch `/tables/` no mount → transformar em `nodes[]` + `edges[]`
-- [ ] Render `<ReactFlow>` com layout dagre auto
-- [ ] Custom node component em `frontend/src/components/schema/TableNode.tsx`
-- [ ] Edges com label de coluna FK
-- [ ] Pan + zoom + fit-view inicial
+- Cada tabela como um **bloco visual** com suas colunas e marcadores de chave (PK / FK).
+- **Linhas** ligando colunas FK à tabela referenciada.
+- **Layout automático** inicial — o admin não precisa arrumar nada pra ver algo razoável.
+- **Interação básica**: clicar numa tabela mostra detalhes + atalhos pra "Ver dados" e "Editar schema".
+- **Export visual** — PNG ou SVG pra colar em apresentação / documentação.
 
-### Fase 2 — Interação (3-4 dias)
-- [ ] Click em node → drawer lateral direito com detalhes da tabela
-- [ ] Drawer mostra: stats (rows/cols/rels), lista de colunas full, lista de FKs in/out
-- [ ] Botões no drawer: "Ver dados", "Editar schema", "Tornar pública"
-- [ ] Drag-drop persistente: posições salvas em `localStorage.schema-layout-{workspace_slug}`
-- [ ] Botão "Auto-layout" pra resetar dagre
-- [ ] Highlight: hover num node ilumina suas edges + nodes conectados
-
-### Fase 3 — Filtros + export + polish (2 dias)
-- [ ] Search bar: filtra nodes que matcham o termo
-- [ ] Toggle: "só com FKs" / "todas" / "só públicas"
-- [ ] Export: botão "Baixar PNG/SVG" via `html-to-image`
-- [ ] Minimap canto inferior direito
-- [ ] Toolbar: zoom in/out/fit, density toggle
-
-### Fase 4 — Polish editorial (1 dia)
-- [ ] Aplicar tokens Mora no canvas: fundo `var(--bg-page)`, edges `var(--rule)`, accent FK `var(--accent)`
-- [ ] Hover/focus com `var(--ease-editorial)`
-- [ ] Eyebrow "MAPA DE TABELAS · {workspace_name}" no header
-- [ ] Hairline strong separando header do canvas
-- [ ] Drawer com `<Card>` + tokens
-
-### Fase 5 — Tests + docs (1 dia)
-- [ ] Testar em workspace com 1 tabela, 5 tabelas, 20 tabelas, 50 tabelas
-- [ ] Performance: render < 500ms até 100 tabelas
-- [ ] Update [planning/patch_notes.md](./patch_notes.md)
-
-**Total:** ~9-12 dias.
+Estética coerente com o resto do Atlas (Mora editorial, não "SaaS técnico genérico").
 
 ---
 
-## 🎨 Design proposto (mock textual)
+## Princípios invioláveis
 
-```
-┌─ ATLAS · MAPA DE TABELAS · puczaras ──────────────────────────┐
-│                                              [🔍 buscar...]   │
-│ 23 TABELAS · 14 RELAÇÕES · 312 COLUNAS                        │
-├───────────────────────────────────────────────────────────────┤
-│                                                               │
-│   ┌─ admins ─┐     ┌─ database_groups ─┐     ┌─ moderators ─┐│
-│   │ id PK    │     │ id PK             │     │ id PK         ││
-│   │ username │←────│ owner_id (FK)     │←────│ parent_id (FK)││
-│   │ email    │     │ name              │     │ username      ││
-│   └──────────┘     └───────────────────┘     └───────────────┘│
-│                            ↑                                  │
-│                            │                                  │
-│                    ┌─ moderator_perms ─┐                      │
-│                    │ id PK              │                      │
-│                    │ moderator_id (FK)  │                      │
-│                    │ group_id (FK)      │                      │
-│                    └────────────────────┘                      │
-│                                                               │
-│ [Auto-layout] [Densa] [Cards]              [📥 PNG] [📥 SVG]   │
-└───────────────────────────────────────────────────────────────┘
-```
+1. **Reuso de dados.** Não cria endpoint novo. `GET /tables/` já retorna colunas e relações.
+2. **Performance é critério de sucesso.** Tem que renderizar suave até ~100 tabelas. Acima disso é caso degenerado.
+3. **Read-only por default.** Edição de schema continua em `/admin/tables/create`. Click no diagrama leva pra lá; não edita inline.
+4. **Visual editorial.** Não copia a estética genérica de ferramentas de ERD. Usa primitivos Mora (Card, Eyebrow, Hairline, Pill, tokens).
+5. **Funciona offline depois de carregar.** É só renderização — não precisa de polling nem subscribe.
 
 ---
 
-## ⚠️ Decisões em aberto
+## Fases (alto nível)
 
-1. **Tabelas de sistema (`_tables`, `_columns`, `users`) aparecem ou não?**
-   - Aparecer: completo, mas polui pro admin que só quer ver SUAS tabelas
-   - **Recomendação:** toggle "Mostrar tabelas do sistema" off por default
+| # | Marco | Por que precisa |
+|---|---|---|
+| 1 | Decidir lib + spike | Diagramas interativos não se faz à mão. Validar a escolha antes de gastar dias. |
+| 2 | Render básico funcionando | Já entrega 80% do valor: ver as conexões |
+| 3 | Interação + export | O outro 20%: aprofundar e levar pra fora |
 
-2. **Edges com cardinality (1:1 / 1:N / N:N)?**
-   - Mais correto, mas precisa inferir do schema
-   - **Recomendação:** versão 1 sem cardinality (todos como 1:N por simplicidade), iterar depois
-
-3. **Edição inline?** Click numa coluna pra renomear direto no diagrama?
-   - Cool mas perigoso (rename quebra dados)
-   - **Recomendação:** versão 1 só leitura + drawer; edição fica no Schema Editor
-
-4. **Salvar layout por workspace ou por user?**
-   - User: cada admin organiza do seu jeito
-   - Workspace: time inteiro vê o mesmo layout
-   - **Recomendação:** localStorage por user, opção "Salvar como layout do workspace" pra teams (futuro)
-
-5. **Ferramenta vs `@xyflow/react`:**
-   - Alternativas: D3, Cytoscape, mermaid (read-only)
-   - **Recomendação:** `@xyflow/react` ganha por DX (custom nodes em React) + ecosystem
+Polish editorial pode ser uma sub-fase ou diluído em todas as fases — decidir na hora.
 
 ---
 
-## 🧾 Critério de aceite
+## Decisões em aberto (perguntar ao Diretor antes da Fase 1)
 
-- [ ] `/admin/schema` carrega em < 500ms com 20 tabelas
-- [ ] Cada tabela mostra colunas + PK + FK indicators
-- [ ] Edges conectam FKs corretamente, com label da coluna
-- [ ] Click em tabela abre drawer com detalhes + ações
-- [ ] Drag-drop salva posição em localStorage
-- [ ] "Auto-layout" reseta com dagre
-- [ ] Search filtra nodes
-- [ ] Export PNG funciona
-- [ ] Visual coerente com identidade Mora (Fraunces, tokens, hairlines)
-- [ ] Sidebar nav admin tem item novo "Mapa" / "Schema" linkando aqui
-- [ ] `npm run build` passa
-- [ ] Smoke: workspace com 0 tabelas mostra empty state editorial
+- **Tabelas de sistema (`_tables`, `_columns`, `users`) aparecem no diagrama?** Tendência: não por padrão, com toggle pra mostrar.
+- **Layout salvo onde?** Por usuário (cada admin organiza do seu jeito) ou por workspace (time inteiro vê o mesmo)? Tendência: por usuário no localStorage; "salvar como layout do workspace" fica pra futuro.
+- **Cardinality nas linhas (1:1, 1:N, N:N)?** Tecnicamente correto, mas pode poluir. Tendência: começar sem, adicionar se sentir falta.
+- **Filtro / busca?** Em databases grandes, search é essencial. Em pequenos é overkill. Tendência: incluir mesmo assim, é barato.
+- **Tabelas órfãs (sem FK pra nem de ninguém)?** Mostrar isoladas no canvas ou ter uma seção separada? Tendência: isoladas no canvas, mas verificar se fica feio.
 
 ---
 
-## 🔗 Dependências
+## Riscos
 
-- **Bloqueia:** nenhum milestone.
-- **Bloqueado por:** M5 (primitivos UI maduros).
-- **Sinergia com:** M2 (relações já existem no DB), M11 (futuramente IA pode sugerir FKs faltando vendo o diagrama).
+- **Lib escolhida pode ser exagerada** (resolve N coisas que a gente não precisa) ou **insuficiente** (precisamos custom node editorial e ela não permite). Por isso a Fase 1 é spike.
+- **Auto-layout em databases grandes vira spaghetti.** Algoritmos de auto-layout pra grafos têm limites. Plano B: força bruta + drag manual + persist.
+- **Performance em 100+ tabelas.** Pode precisar de virtualização ou carregamento lazy. Mensurar antes de assumir que tá OK.
 
 ---
 
-## 💡 Inspirações
+## Critério de sucesso (alto nível)
 
-- **Supabase Database Visualizer** — `@xyflow/react`, custom nodes elegantes
-- **dbdiagram.io** — text-to-diagram, foco em ERDs
-- **drawSQL** — ERD colaborativo, custom nodes ricos
-- **Linear's roadmap view** — usa react-flow com cards editoriais
+1. Admin abre `/admin/schema`, vê todas as tabelas e como se conectam, sem precisar configurar nada.
+2. Em workspace com 20+ tabelas, ainda é navegável (zoom, pan, search).
+3. Click numa tabela leva pra ações rápidas (ver dados, editar schema).
+4. Layout que o admin reorganizou continua igual quando ele volta na tela.
+5. Botão de export funciona — gera arquivo de imagem usável.
 
-Estes podem servir de referência visual. O nosso será **mais editorial** (Fraunces, hairlines, paper-texture sutil no canvas) e menos "técnico/SaaS-genérico".
+Não-objetivos:
+- Edição de schema dentro do diagrama (inline rename, drag pra criar FK, etc.)
+- Multi-workspace na mesma view (admin só vê o seu)
+- Versionamento do schema ("snapshot do schema em X data")
+- AI suggestions ("você esqueceu de criar essa FK óbvia")
+
+---
+
+## Dependências
+
+- **Bloqueia:** nada.
+- **Bloqueado por:** ideal ter M5 (primitivos UI maduros) + M3 (schema final, evita refatorar a tela quando RLS chegar). M6 não bloqueia diretamente, mas faz sentido vir depois.
+- **Sinergia com:** M11 (futuramente IA pode sugerir FKs faltando vendo o diagrama).
