@@ -41,10 +41,10 @@ npm run dev
 
 ## Estado Atual (2026-05)
 
-- **M1, M2:** ✅ mergeados (CRUD básico, FKs, SQL import, admin UI).
-- **M5 Atlas Redesign:** Fases 0-3 mergeadas; Fase 4 (polish) em PR #5 aberto. Ver [planning/roadmap.md](planning/roadmap.md) e [.speckit/tasks/M5_atlas_redesign.md](.speckit/tasks/M5_atlas_redesign.md).
-- **Próxima milestone aprovada:** M3 (RLS/Postgres) — Diretor priorizou base sólida sobre features visíveis. Ver [planning/milestone_3_rls_migration.md](planning/milestone_3_rls_migration.md).
+- **M1, M2, M5:** ✅ mergeados. M5 fechou com PR #5 (polish editorial), landing/admin overview redesignados em fix subsequente.
+- **Próxima milestone (em andamento):** M3 (RLS/Postgres). Diretor priorizou base sólida sobre features visíveis. Plano em [planning/milestone_3_rls_migration.md](planning/milestone_3_rls_migration.md). Fase 0 = pré-requisitos (Postgres local + cleanup backend).
 - **Filas seguintes:** M6 (Publish & Export), M7 (Schema Visualizer). Planos enxutos em `planning/milestone_6_*.md` e `milestone_7_*.md`.
+- **Roadmap geral:** [planning/roadmap.md](planning/roadmap.md).
 
 ## Armadilhas / Design Smells
 
@@ -54,8 +54,8 @@ FastAPI resolve corretamente (literais antes de parâmetros), mas tabelas com no
 ### `_safe_migrate` não cobre todas as tabelas legacy
 Não é crítico porque `Base.metadata.create_all()` cria as faltantes. Atentar em databases legados.
 
-### `backend/dynamic_template.db` versionado
-Arquivo SQLite local entrou no git em algum momento. Não bloqueia mas suja diffs. Adicionar ao `.gitignore` quando for natural.
+### `backend/dynamic_template.db` — destrackeado
+SQLite local foi destrackeado (PR cleanup pós-M5) e o `.gitignore` já cobre `*.db`. Localmente o arquivo continua existindo e não suja mais diffs.
 
 ## Tabelas de Sistema (não são dinâmicas)
 `users`, `database_groups`, `moderator_permissions`, `_tables`, `_columns`, `_relations`, `qr_login_sessions`

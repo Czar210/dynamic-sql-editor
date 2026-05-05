@@ -48,3 +48,14 @@ Fechamento do pacote de relacionamentos entre tabelas dinâmicas, parser robusto
   - `backend/pytest.ini` fixa `testpaths = tests` para que `pytest -q` ignore arquivos scratch (`*.txt`) na raiz de `backend/` (esses serão removidos na Fase 0.3 do M3).
   - `startup_event` respeita `SKIP_TEST_SEED=1` (setado pelo conftest) para não poluir o DB de teste com `testadmin` pré-seedado de fluxos E2E de frontend.
   - `tests/test_qr.py` refatorado para usar as fixtures `client` / `db_session` do conftest em vez de um `TestClient` global.
+
+### **[04/05/2026] - Versão 1.3.0 (Milestone 5 - Atlas Redesign / Mora Editorial)**
+Identidade visual da casa Mora aplicada em todo o produto. PR #1 → #5, todas mergeadas em `main`.
+
+- ✨ **Backend leve**: `workspace_name` + `workspace_slug` em `users` ([models.py](../backend/models.py)) + `meta` (`row_count`, `column_count`, `relation_count`) em `GET /api/tables/`. Endpoint `PATCH /api/admins/me/workspace` com validações de slug. `GET /api/auth/me` exposto.
+- ✨ **Tokens & primitivos editoriais**: tokens Mora em [globals.css](../frontend/src/app/globals.css) (4 acentos × 2 modos), fontes Fraunces + IBM Plex Sans/Mono via `next/font`. `ThemeContext` reescrito (`data-theme` + `data-accent`). Primitivos em [components/ui/](../frontend/src/components/ui/): Icon, Eyebrow, Hairline, Button, Pill, Card, Field/Input/Select/Textarea, SectionNum, MMonogram, OwlGlyph.
+- ✨ **15 telas redesenhadas**: Login, Tables Index, Data Grid, Dashboard, Sidebar, Schema Editor, Import SQL/Sheet, Moderadores, Grupos, QR Auth, Master Panel, Explore, Theme Studio + Publish (mock), Site Público (`/[workspace]`). Wiring `useAuth()`/fetch real preservado — só estrutura editorial trocou.
+- ✨ **Tweaks Panel**: drawer flutuante ([TweaksPanel.tsx](../frontend/src/components/TweaksPanel.tsx)) com density / terminology / persona override. Visível em dev sempre, em prod via `localStorage.mora-tweaks-enabled='1'`.
+- ✨ **Polish editorial (Fase 4)**: paper-grain texture, microtipografia Fraunces (`opsz` + `SOFT`), MMonogram + OwlGlyph aplicados, drop-caps em abstracts, tabular nums + ss01 em números, easing editorial em transitions.
+- 🐛 **Fix orphans**: landing + admin overview redesenhados (commit `6f39333`); MMonogram em tables-index movido pra inline-left (commit `812c03d`).
+- 📚 **Planejamento**: roadmap.md criado, planos enxutos M6 (Publish & Export) e M7 (Schema Visualizer) escritos sem alucinação técnica.
