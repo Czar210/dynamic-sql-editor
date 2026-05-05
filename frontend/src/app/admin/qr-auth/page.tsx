@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/AuthContext'
-import { Button, Card, Eyebrow, Hairline, Icon, Pill, SectionNum } from '@/components/ui'
+import { Button, Card, Eyebrow, Hairline, Icon, OwlGlyph, Pill, SectionNum } from '@/components/ui'
 
 type Status = 'pending' | 'loading' | 'success' | 'error'
 
@@ -132,15 +132,16 @@ export default function QRAuthPage() {
               <FakeQR />
             )}
 
-            <div style={{
+            <div className="numeric" style={{
               fontFamily: 'var(--font-mono)', fontSize: 22, letterSpacing: '0.3em',
               color: 'var(--fg-primary)', marginTop: 24, fontWeight: 500,
+              textTransform: 'uppercase',
             }}>
               {codeDisplay}
             </div>
 
-            <div style={{
-              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.16em',
+            <div className="numeric" style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: 'var(--tracking-eyebrow)',
               textTransform: 'uppercase', marginTop: 12,
               color: seconds < 30 ? 'var(--danger)' : 'var(--fg-muted)',
             }}>
@@ -235,9 +236,12 @@ export default function QRAuthPage() {
             ))}
           </div>
 
-          <p style={{ marginTop: 24, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em', color: 'var(--fg-muted)', textTransform: 'uppercase' }}>
-            session id · {(session_id ?? '—').slice(0, 12)}
-          </p>
+          <div style={{ marginTop: 24, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
+            <p className="numeric" style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: 'var(--tracking-eyebrow)', color: 'var(--fg-muted)', textTransform: 'uppercase' }}>
+              session id · {(session_id ?? '—').slice(0, 12)}
+            </p>
+            <OwlGlyph size={10} opacity={0.45} caption="autorize" />
+          </div>
         </div>
       </div>
     </div>

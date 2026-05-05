@@ -151,7 +151,7 @@ export default function SchemaEditorPage() {
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 80px)' }}>
       {/* Header */}
       <header style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--fg-muted)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: 'var(--tracking-eyebrow)', textTransform: 'uppercase', color: 'var(--fg-muted)' }}>
           <Link href="/admin/tables" style={{ color: 'var(--accent-text)', textDecoration: 'none' }}>
             Tabelas
           </Link>
@@ -161,7 +161,7 @@ export default function SchemaEditorPage() {
         <Eyebrow num={3}>Editor de schema</Eyebrow>
         <h1 style={{
           fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 400,
-          letterSpacing: '-0.02em', marginTop: 12, fontStyle: 'italic',
+          letterSpacing: 'var(--tracking-h1)', marginTop: 12, fontStyle: 'italic',
         }}>
           {name || 'sua nova tabela'}
         </h1>
@@ -385,11 +385,11 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint?: stri
       <div style={{
         width: 32, height: 18, borderRadius: 999, position: 'relative', flexShrink: 0,
         background: checked ? 'var(--accent)' : 'var(--bg-sunken)',
-        border: '1px solid var(--rule)', transition: 'background 0.15s',
+        border: '1px solid var(--rule)', transition: 'background var(--duration-base) var(--ease-editorial)',
       }}>
         <div style={{
           width: 14, height: 14, borderRadius: '50%', background: 'var(--bg-elevated)',
-          position: 'absolute', top: 1, left: checked ? 16 : 1, transition: 'left 0.15s',
+          position: 'absolute', top: 1, left: checked ? 16 : 1, transition: 'left var(--duration-base) var(--ease-paper)',
         }} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>

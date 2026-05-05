@@ -243,7 +243,7 @@ export default function DataViewer({ params }: { params: Promise<{ table: string
               {tableName}
             </h1>
             <Eyebrow style={{ fontSize: 10 }}>
-              {records.length.toLocaleString('pt-BR')} REGISTROS · {columns.length} COLUNAS · {relations.length} RELAÇÕES
+              <span className="numeric">{records.length.toLocaleString('pt-BR')} REGISTROS · {columns.length} COLUNAS · {relations.length} RELAÇÕES</span>
             </Eyebrow>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
@@ -403,22 +403,9 @@ export default function DataViewer({ params }: { params: Promise<{ table: string
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'text' }}>
                                 <span>{displayValue(c, record)}</span>
                                 {fk && (
-                                  <span
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      padding: '1px 6px',
-                                      background: 'var(--bg-sunken)',
-                                      color: 'var(--fg-muted)',
-                                      fontFamily: 'var(--font-mono)',
-                                      fontSize: 9,
-                                      letterSpacing: '0.08em',
-                                      textTransform: 'uppercase',
-                                      borderRadius: 'var(--radius-sm)',
-                                    }}
-                                  >
-                                    [{fk.to_table_name}]
-                                  </span>
+                                  <Pill tone="accent" style={{ fontSize: 10 }}>
+                                    {fk.to_table_name}
+                                  </Pill>
                                 )}
                               </span>
                             )}
@@ -567,5 +554,6 @@ function iconBtnStyle(color: string): React.CSSProperties {
     alignItems: 'center',
     padding: 4,
     borderRadius: 'var(--radius-sm)',
+    transition: 'background var(--duration-fast) var(--ease-editorial), color var(--duration-fast) var(--ease-editorial)',
   }
 }

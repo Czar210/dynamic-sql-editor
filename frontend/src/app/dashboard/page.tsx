@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useMemo, useState } from 'react'
 import BarChartWidget from '@/components/widgets/BarChartWidget'
-import { Card, Eyebrow, Hairline, Pill, SectionNum } from '@/components/ui'
+import { Card, Eyebrow, Hairline, MMonogram, OwlGlyph, Pill, SectionNum } from '@/components/ui'
 import { useAuth } from '@/components/AuthContext'
 
 interface TableMeta {
@@ -81,7 +81,10 @@ export default function PublicDashboard() {
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '64px 48px 80px', display: 'flex', flexDirection: 'column', gap: 48 }}>
 
         {/* Masthead — capa de revista */}
-        <header>
+        <header className="paper-texture" style={{ position: 'relative', padding: '8px 0 4px' }}>
+          <div style={{ position: 'absolute', top: 0, right: 0, opacity: 0.85 }}>
+            <MMonogram size={64} color="var(--accent-text)" />
+          </div>
           <Eyebrow accent style={{ marginBottom: 18, fontSize: 12 }}>
             Volume 1 · Número 1 · {today}
           </Eyebrow>
@@ -92,7 +95,7 @@ export default function PublicDashboard() {
               fontStyle: 'italic',
               fontSize: 'clamp(72px, 11vw, 128px)',
               lineHeight: 0.95,
-              letterSpacing: '-0.03em',
+              letterSpacing: 'var(--tracking-display)',
               margin: '0 0 24px',
               color: 'var(--fg-primary)',
             }}
@@ -100,17 +103,18 @@ export default function PublicDashboard() {
             {workspaceName}.
           </h1>
           <p
+            className="drop-cap"
             style={{
               fontFamily: 'var(--font-display)',
               fontStyle: 'italic',
               fontSize: 22,
-              lineHeight: 1.4,
+              lineHeight: 1.45,
               color: 'var(--fg-secondary)',
               maxWidth: 640,
               margin: '0 0 28px',
             }}
           >
-            Uma publicação contínua sobre dados editoriais.
+            Uma publicação contínua sobre dados editoriais — onde cada tabela é um capítulo, cada registro é uma linha do enredo, e o catálogo é o índice geral do que vive aqui.
           </p>
           <Hairline strong />
         </header>
@@ -182,6 +186,7 @@ export default function PublicDashboard() {
         {/* Strip de números — TODO(M6): wire to real metrics */}
         <section>
           <div
+            className="numeric"
             style={{
               display: 'flex',
               alignItems: 'baseline',
@@ -326,24 +331,28 @@ export default function PublicDashboard() {
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 10,
-              letterSpacing: '0.18em',
+              letterSpacing: 'var(--tracking-eyebrow)',
               textTransform: 'uppercase',
               color: 'var(--fg-muted)',
             }}
           >
             Editado por {workspaceName}. Powered by Atlas — uma ferramenta Mora.
           </span>
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-              color: 'var(--fg-muted)',
-            }}
-          >
-            CC BY-SA 4.0
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <span
+              className="numeric"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                letterSpacing: 'var(--tracking-eyebrow)',
+                textTransform: 'uppercase',
+                color: 'var(--fg-muted)',
+              }}
+            >
+              CC BY-SA 4.0
+            </span>
+            <OwlGlyph size={9} opacity={0.4} />
+          </div>
         </footer>
       </div>
     </div>

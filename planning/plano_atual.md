@@ -68,10 +68,18 @@ Resultado esperado: **38 passed, 0 failed, 0 errors**. Se algum teste falhar, co
 
 ### 🚀 Próximos Milestones
 
-#### Milestone 3 — Migração RLS / Supabase-Native (backend)
-Ver [milestone_3_rls_migration.md](./milestone_3_rls_migration.md). **Não abrir a Fase 0 do M3 sem** o pytest M2 verde acima.
+> **Visão estratégica completa em [roadmap.md](./roadmap.md)** — todas as milestones, prioridades, backlog de ideias. Mantido vivo com Diretor.
 
-#### Milestone 5 — Atlas Redesign / Mora Editorial Identity (frontend, paralelo)
-Ver [milestone_5_atlas_redesign.md](./milestone_5_atlas_redesign.md). Migra todo o frontend pra identidade editorial Mora (paleta Parchment/Midnight × 4 acentos, Fraunces + IBM Plex, 13 telas redesenhadas em 3 fases). **Frontend-only**, não bloqueia M3/M4. Spec/Plan/Tasks em [.speckit/](../.speckit/specs/M5_atlas_redesign.md).
+#### Em curso
+- **M5** — Atlas Redesign / Mora Editorial Identity ([plano](./milestone_5_atlas_redesign.md)) — Fase 4 polish em progresso.
 
-> M4 (auth unification) está congelado — ver [backlog_m4_auth_unification.md](./backlog_m4_auth_unification.md).
+#### Próximas (Faixa 1 — pós-M5)
+- **M3** — Migração RLS / Supabase-Native ([plano](./milestone_3_rls_migration.md)). Pré-requisito pra deploy real.
+- **M6** — Publish & Export ([plano](./milestone_6_publish_export.md)). Fluxo real de publicação do site público (hoje só toggle binário por tabela).
+- **M7** — Schema Visualizer ([plano](./milestone_7_schema_visualizer.md)). Painelzão ER pra ver conexões entre tabelas.
+
+#### Médio/longo prazo
+- **M8** Media Library, **M9** Webhooks/API Keys/Audit, **M10** Real-time, **M11** AI helpers, **M12** Mobile companion. Detalhes em [roadmap.md](./roadmap.md).
+
+#### Congelado
+- **M4** — Auth Unification ([backlog](./backlog_m4_auth_unification.md)). Espera M3 fechar.

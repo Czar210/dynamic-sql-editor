@@ -1,50 +1,169 @@
-import { Database, TrendingUp, Users, Activity } from "lucide-react"
+'use client'
 
-export default function AdminDashboard() {
-  const stats = [
-    { label: "Total Tables", value: "3", icon: Database, trend: "+1 this week", color: "text-blue-400", bg: "bg-blue-400/10" },
-    { label: "Active Records", value: "1,204", icon: Users, trend: "+12% this month", color: "text-emerald-400", bg: "bg-emerald-400/10" },
-    { label: "API Requests", value: "45.2k", icon: Activity, trend: "+5% vs last week", color: "text-purple-400", bg: "bg-purple-400/10" },
-    { label: "Uptime", value: "99.9%", icon: TrendingUp, trend: "Stable", color: "text-indigo-400", bg: "bg-indigo-400/10" },
+import { useEffect, useMemo, useState } from 'react'
+import { useAuth } from '@/components/AuthContext'
+import { Card, Eyebrow, Hairline, MMonogram, Pill, SectionNum } from '@/components/ui'
+
+type TableMeta = {
+  id: number
+  name: string
+  is_public: boolean
+  meta?: { row_count: number; column_count: number; relation_count: number }
+}
+
+function editorialDate() {
+  return new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+}
+
+export default function AdminOverview() {
+  const { user, token } = useAuth()
+  const [tables, setTables] = useState<TableMeta[]>([])
+  const today = useMemo(editorialDate, [])
+
+  useEffect(() => {
+    if (!token) return
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/tables/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setTables(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }, [token])
+
+  const totalTables = tables.length
+  const publicTables = tables.filter(t => t.is_public).length
+  const totalRecords = tables.reduce((sum, t) => sum + (t.meta?.row_count ?? 0), 0)
+  const totalRelations = tables.reduce((sum, t) => sum + (t.meta?.relation_count ?? 0), 0)
+  const workspaceName = user?.workspace_name ?? 'Atlas'
+
+  const kpis = [
+    { num: '01', label: 'Tabelas', value: totalTables, hint: `${publicTables} pública${publicTables === 1 ? '' : 's'}` },
+    { num: '02', label: 'Registros', value: totalRecords.toLocaleString('pt-BR'), hint: 'todas as tabelas' },
+    { num: '03', label: 'Relações', value: totalRelations, hint: 'foreign keys' },
+    { num: '04', label: 'Uptime', value: '99.9%', hint: 'estável' },
   ]
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard Overview</h1>
-        <p className="text-neutral-400 mt-2">Welcome to your headless CMS dynamic panel.</p>
-      </div>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-page)', color: 'var(--fg-primary)' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '48px 0 80px', display: 'flex', flexDirection: 'column', gap: 40 }}>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => (
-          <div key={i} className="p-6 rounded-2xl border border-neutral-800 bg-neutral-900/50 hover:bg-neutral-800/50 transition-colors">
-            <div className="flex items-center justify-between mb-4">
-              <div className={`p-3 rounded-lg ${stat.bg}`}>
-                <stat.icon className={`w-5 h-5 ${stat.color}`} />
+        <header className="paper-texture" style={{ position: 'relative', padding: '8px 0 4px' }}>
+          <div style={{ position: 'absolute', top: 0, right: 0, opacity: 0.7 }}>
+            <MMonogram size={48} color="var(--accent-text)" />
+          </div>
+          <Eyebrow accent style={{ marginBottom: 14 }}>
+            Edição administrativa · {today}
+          </Eyebrow>
+          <h1
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontWeight: 400,
+              fontSize: 'clamp(48px, 6vw, 72px)',
+              lineHeight: 1,
+              letterSpacing: 'var(--tracking-h1)',
+              margin: '0 0 18px',
+              textWrap: 'balance',
+            }}
+          >
+            Bom dia, {user?.username}.
+          </h1>
+          <p
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontStyle: 'italic',
+              fontSize: 18,
+              lineHeight: 1.5,
+              color: 'var(--fg-secondary)',
+              maxWidth: 560,
+              margin: 0,
+            }}
+          >
+            O painel de {workspaceName} em um relance — métricas, mudanças recentes e estado do sistema.
+          </p>
+        </header>
+
+        <Hairline strong />
+
+        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 24 }}>
+          {kpis.map(k => (
+            <Card key={k.num} padding raised={false} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <SectionNum>{k.num}</SectionNum>
+                <Eyebrow>{k.label}</Eyebrow>
               </div>
-            </div>
-            <div>
-              <p className="text-neutral-400 text-sm font-medium">{stat.label}</p>
-              <h3 className="text-2xl font-bold mt-1">{stat.value}</h3>
-              <p className="text-sm text-neutral-500 mt-2">{stat.trend}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="p-6 rounded-2xl border border-neutral-800 bg-neutral-900/50 min-h-[300px]">
-          <h3 className="font-semibold mb-4">Recent Schema Changes</h3>
-          <div className="space-y-4">
-            <p className="text-sm text-neutral-400">Posts table generated successfully.</p>
-            <p className="text-sm text-neutral-400">Users table was modified (added 'avatar_url').</p>
-          </div>
-        </div>
-        <div className="p-6 rounded-2xl border border-neutral-800 bg-neutral-900/50 min-h-[300px]">
-          <h3 className="font-semibold mb-4">System Status</h3>
-          <p className="text-sm text-neutral-400">Environment: Vercel Production Preview</p>
-          <p className="text-sm text-neutral-400">Database: SQLite Local (Active)</p>
-        </div>
+              <div
+                className="numeric"
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontWeight: 400,
+                  fontSize: 56,
+                  lineHeight: 1,
+                  letterSpacing: 'var(--tracking-h1)',
+                  fontVariationSettings: '"opsz" 144, "SOFT" 50',
+                  color: 'var(--fg-primary)',
+                }}
+              >
+                {k.value}
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)', letterSpacing: 'var(--tracking-eyebrow)', textTransform: 'uppercase' }}>
+                {k.hint}
+              </div>
+            </Card>
+          ))}
+        </section>
+
+        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 24 }}>
+          <Card padding>
+            <Eyebrow num="A" accent style={{ marginBottom: 16 }}>
+              Mudanças recentes
+            </Eyebrow>
+            <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 400, fontSize: 22, margin: '0 0 16px' }}>
+              No índice editorial
+            </h3>
+            {tables.length === 0 ? (
+              <p style={{ color: 'var(--fg-muted)', fontSize: 13, margin: 0 }}>
+                Sem tabelas ainda. Comece criando uma em <em>Tabelas</em>.
+              </p>
+            ) : (
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {tables.slice(0, 5).map(t => (
+                  <li key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 12, borderBottom: '1px solid var(--rule-faint)' }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: 'var(--fg-primary)' }}>{t.name}</div>
+                      <div className="numeric" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)', letterSpacing: '0.04em', textTransform: 'uppercase', marginTop: 2 }}>
+                        {t.meta?.row_count ?? 0} registros · {t.meta?.column_count ?? 0} colunas
+                      </div>
+                    </div>
+                    {t.is_public ? <Pill tone="ok" dot>Público</Pill> : <Pill tone="muted">Privado</Pill>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <Card padding>
+            <Eyebrow num="B" accent style={{ marginBottom: 16 }}>
+              Estado do sistema
+            </Eyebrow>
+            <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 400, fontSize: 22, margin: '0 0 20px' }}>
+              Infraestrutura
+            </h3>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[
+                { k: 'Ambiente', v: process.env.NODE_ENV === 'production' ? 'Produção' : 'Desenvolvimento', tone: 'ok' as const },
+                { k: 'Banco', v: 'SQLite local', tone: 'muted' as const },
+                { k: 'API', v: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000', tone: 'muted' as const },
+                { k: 'Versão', v: 'v1.3.0 — Atlas', tone: 'accent' as const },
+              ].map(row => (
+                <li key={row.k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottom: '1px solid var(--rule-faint)' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)', letterSpacing: 'var(--tracking-eyebrow)', textTransform: 'uppercase' }}>{row.k}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg-secondary)' }}>{row.v}</span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </section>
+
       </div>
     </div>
   )

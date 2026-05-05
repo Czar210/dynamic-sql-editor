@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { QRCodeCanvas } from 'qrcode.react'
 import { useAuth } from '@/components/AuthContext'
-import { Button, Eyebrow, Field, Hairline, Icon, Input, Pill, SectionNum } from '@/components/ui'
+import { Button, Eyebrow, Field, Hairline, Icon, Input, MMonogram, OwlGlyph, Pill, SectionNum } from '@/components/ui'
 
 const MANIFESTO_ITEMS = [
   'mora (lat.) — a pausa necessária para que a profundidade aconteça.',
@@ -86,6 +86,7 @@ export default function LoginPage() {
       <div className="flex-1 grid" style={{ gridTemplateColumns: '1.05fr 0.95fr', minHeight: 0 }}>
         {/* LEFT — masthead editorial */}
         <div
+          className="paper-texture"
           style={{
             background: 'var(--bg-surface)',
             borderRight: '1px solid var(--rule)',
@@ -94,15 +95,17 @@ export default function LoginPage() {
             flexDirection: 'column',
             justifyContent: 'space-between',
             gap: 48,
+            position: 'relative',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <MMonogram size={32} color="var(--accent-text)" />
             <span
               style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: 26,
                 fontWeight: 500,
-                letterSpacing: '-0.01em',
+                letterSpacing: 'var(--tracking-tight)',
                 color: 'var(--fg-primary)',
               }}
             >
@@ -112,7 +115,7 @@ export default function LoginPage() {
               style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 10,
-                letterSpacing: '0.2em',
+                letterSpacing: 'var(--tracking-eyebrow)',
                 textTransform: 'uppercase',
                 color: 'var(--fg-muted)',
               }}
@@ -178,16 +181,19 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              letterSpacing: '0.16em',
-              textTransform: 'uppercase',
-              color: 'var(--fg-muted)',
-            }}
-          >
-            mora studio · ferramenta editorial
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24 }}>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                letterSpacing: 'var(--tracking-eyebrow)',
+                textTransform: 'uppercase',
+                color: 'var(--fg-muted)',
+              }}
+            >
+              mora studio · ferramenta editorial
+            </div>
+            <OwlGlyph size={11} opacity={0.5} caption="mora" />
           </div>
         </div>
 
@@ -252,11 +258,12 @@ export default function LoginPage() {
                       cursor: 'pointer',
                       fontFamily: 'var(--font-mono)',
                       fontSize: 11,
-                      letterSpacing: '0.18em',
+                      letterSpacing: 'var(--tracking-eyebrow)',
                       textTransform: 'uppercase',
                       color: active ? 'var(--fg-primary)' : 'var(--fg-muted)',
                       borderBottom: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
                       marginBottom: -1,
+                      transition: 'color var(--duration-fast) var(--ease-editorial), border-color var(--duration-base) var(--ease-editorial)',
                     }}
                   >
                     {t.label}

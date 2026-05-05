@@ -124,31 +124,31 @@
 **Objetivo:** elevar todas as 13 telas redesenhadas (Fases 2 + 3) ao nível de fidelidade visual do protótipo handoff. Sem mudar wiring, sem mudar estrutura — só refinar densidade, ornamentos, microtipografia, hover/focus states, e aplicar texturas.
 
 ### Refinamentos transversais
-- [ ] **T4.1** — Aplicar `--paper-grain` SVG noise nas surfaces principais (body, masthead). Usar `.paper-texture` utility do tokens.css.
-- [ ] **T4.2** — Microtipografia Fraunces: aplicar `font-variation-settings: "opsz" 144, "SOFT" 50` em headings display; itálicos editoriais em subheadings.
-- [ ] **T4.3** — Decorações: M-monogram (`assets/m-monogram.svg`) e Owl glyph ASCII em corners onde o protótipo coloca.
-- [ ] **T4.4** — Drop caps em abstracts longos (primeira letra Fraunces gigante, 3 linhas de altura).
-- [ ] **T4.5** — Tabular nums + ss01 feature em todos os números de dados.
-- [ ] **T4.6** — Hover/focus states refinados com `--ease-editorial` (cubic-bezier slow start). Sem fade abrupto.
+- [x] **T4.1** — Aplicar `--paper-grain` SVG noise nas surfaces principais (body, masthead). Usar `.paper-texture` utility do tokens.css.
+- [x] **T4.2** — Microtipografia Fraunces: aplicar `font-variation-settings: "opsz" 144, "SOFT" 50` em headings display; itálicos editoriais em subheadings.
+- [x] **T4.3** — Decorações: M-monogram (`assets/m-monogram.svg`) e Owl glyph ASCII em corners onde o protótipo coloca.
+- [x] **T4.4** — Drop caps em abstracts longos (primeira letra Fraunces gigante, 3 linhas de altura).
+- [x] **T4.5** — Tabular nums + ss01 feature em todos os números de dados.
+- [x] **T4.6** — Hover/focus states refinados com `--ease-editorial` (cubic-bezier slow start). Sem fade abrupto.
 - [ ] **T4.7** — Densidade calibrada: comparar lado-a-lado com screenshots do protótipo, ajustar paddings/gaps milímetro-a-milímetro.
-- [ ] **T4.8** — Remover shim `--color-*` legacy do globals.css (todas as telas devem ter migrado pros tokens novos até aqui).
+- [x] **T4.8** — Remover shim `--color-*` legacy do globals.css (todas as telas devem ter migrado pros tokens novos até aqui).
 
 ### Polish por tela (uma sub-task por tela, comparar com prototype JSX correspondente)
-- [ ] **T4.9** — Login (`/login`)
-- [ ] **T4.10** — Tables Index (`/admin/tables`)
-- [ ] **T4.11** — Data Grid (`/admin/data/[table]`)
-- [ ] **T4.12** — Dashboard (`/dashboard`)
-- [ ] **T4.13** — Sidebar (`admin/layout.tsx`)
-- [ ] **T4.14** — Schema Editor (`/admin/tables/create`)
-- [ ] **T4.15** — Import SQL (`/admin/import/sql`)
-- [ ] **T4.16** — Import Sheet (`/admin/import/data`)
-- [ ] **T4.17** — Moderadores (`/admin/users`)
-- [ ] **T4.18** — Grupos (`/admin/groups`)
-- [ ] **T4.19** — QR Auth (`/admin/qr-auth`)
-- [ ] **T4.20** — Master Panel (`/admin/admins`)
-- [ ] **T4.21** — Explore (`/explore`)
-- [ ] **T4.22** — Theme Studio + Publish (`/admin/publish`)
-- [ ] **T4.23** — Site Público (`/[workspace]`)
+- [x] **T4.9** — Login (`/login`)
+- [x] **T4.10** — Tables Index (`/admin/tables`)
+- [x] **T4.11** — Data Grid (`/admin/data/[table]`)
+- [x] **T4.12** — Dashboard (`/dashboard`)
+- [x] **T4.13** — Sidebar (`admin/layout.tsx`)
+- [x] **T4.14** — Schema Editor (`/admin/tables/create`)
+- [x] **T4.15** — Import SQL (`/admin/import/sql`)
+- [x] **T4.16** — Import Sheet (`/admin/import/data`)
+- [x] **T4.17** — Moderadores (`/admin/users`)
+- [x] **T4.18** — Grupos (`/admin/groups`)
+- [x] **T4.19** — QR Auth (`/admin/qr-auth`)
+- [x] **T4.20** — Master Panel (`/admin/admins`)
+- [x] **T4.21** — Explore (`/explore`)
+- [x] **T4.22** — Theme Studio + Publish (`/admin/publish`)
+- [x] **T4.23** — Site Público (`/[workspace]`)
 
 ### QA Fase 4
 - [ ] **T4.24** — Side-by-side review com screenshots do protótipo (`design_archive/.../screenshots/`) — Diretor aprova cada tela.

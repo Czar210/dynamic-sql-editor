@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/components/AuthContext'
-import { Button, Card, Eyebrow, Field, Hairline, Input, Pill } from '@/components/ui'
+import { Button, Card, Eyebrow, Field, Hairline, Input, MMonogram, Pill } from '@/components/ui'
 
 type Admin = {
   id: number
@@ -75,13 +75,16 @@ export default function AdminsPage() {
   return (
     <div>
       {/* Masthead */}
-      <header style={{ marginBottom: 32 }}>
+      <header className="paper-texture" style={{ marginBottom: 32, position: 'relative', padding: '4px 0' }}>
+        <div style={{ position: 'absolute', top: -4, right: 0, opacity: 0.7 }}>
+          <MMonogram size={48} color="var(--danger)" />
+        </div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 24 }}>
           <div>
             <Eyebrow num={10} style={{ color: 'var(--danger)' }}>Modo master · instância mora</Eyebrow>
             <h1 style={{
               fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 400,
-              letterSpacing: '-0.02em', marginTop: 12, fontStyle: 'italic',
+              letterSpacing: 'var(--tracking-h1)', marginTop: 12, fontStyle: 'italic',
             }}>
               Painel master
             </h1>
@@ -105,9 +108,10 @@ export default function AdminsPage() {
         {kpis.map((k, i) => (
           <Card key={i}>
             <Eyebrow style={{ marginBottom: 10 }}>{`indicador ${String.fromCharCode(65 + i)}`}</Eyebrow>
-            <div style={{
+            <div className="numeric" style={{
               fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 400,
               color: i === 3 ? 'var(--danger)' : 'var(--accent-text)', lineHeight: 1, marginTop: 6,
+              fontVariationSettings: '"opsz" 144, "SOFT" 50',
             }}>
               {k.n}
             </div>
@@ -171,7 +175,7 @@ export default function AdminsPage() {
                 padding: '14px 18px', borderBottom: '1px solid var(--rule-faint)',
                 gap: 14, alignItems: 'center',
               }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>
+                <span className="numeric" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>
                   {String(i + 1).padStart(2, '0')}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -203,7 +207,7 @@ export default function AdminsPage() {
                       background: quotaUsed > 0.7 ? 'var(--danger)' : 'var(--accent)',
                     }} />
                   </div>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', marginTop: 4, display: 'block' }}>
+                  <span className="numeric" style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', marginTop: 4, display: 'block' }}>
                     {Math.round(quotaUsed * 100)}%
                   </span>
                 </div>
