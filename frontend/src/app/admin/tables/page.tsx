@@ -72,27 +72,29 @@ export default function TablesOverview() {
     <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 32 }}>
       {/* Masthead */}
       <header className="paper-texture" style={{ position: 'relative', padding: '4px 0' }}>
-        <div style={{ position: 'absolute', top: -4, right: 0, opacity: 0.7 }}>
-          <MMonogram size={48} color="var(--accent-text)" />
-        </div>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, marginBottom: 16 }}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <Eyebrow accent style={{ marginBottom: 12 }}>
-              Volume 1 · {today}
-            </Eyebrow>
-            <h1
-              style={{
-                fontFamily: 'var(--font-display)',
-                fontWeight: 400,
-                fontSize: 48,
-                lineHeight: 1.05,
-                margin: 0,
-                letterSpacing: 'var(--tracking-h1)',
-                color: 'var(--fg-primary)',
-              }}
-            >
-              Modelos de Dados
-            </h1>
+          <div style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'flex-start', gap: 18 }}>
+            <div style={{ flexShrink: 0, marginTop: 4, opacity: 0.85 }}>
+              <MMonogram size={40} color="var(--accent-text)" />
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <Eyebrow accent style={{ marginBottom: 12 }}>
+                Volume 1 · {today}
+              </Eyebrow>
+              <h1
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontWeight: 400,
+                  fontSize: 48,
+                  lineHeight: 1.05,
+                  margin: 0,
+                  letterSpacing: 'var(--tracking-h1)',
+                  color: 'var(--fg-primary)',
+                }}
+              >
+                Modelos de Dados
+              </h1>
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             <div
