@@ -1,196 +1,107 @@
 # 📤 Milestone 6 — Publish & Export
 
-> **Status:** 📋 Proposta — aguardando aprovação do Diretor
-> **Predecessora obrigatória:** M5 (Atlas Redesign) precisa estar 100% mergeado.
-> **Recomendada (não obrigatória):** M3 (RLS/Postgres) — sem ela, "publicar" continua sendo SQLite local.
-> **Alvo de entrega:** ~2-3 semanas
-> **Objetivo:** transformar a página `/admin/publish` (hoje mock visual) em um fluxo real de publicação. Permitir que o admin escolha **quais tabelas** vão pro site público, **qual tema visual**, e gere uma **URL pública** (`/{slug}` hoje, `slug.atlas.app` no futuro) ou **exportação estática** (ZIP com HTML+JSON).
+> **Status:** 📋 Proposta
+> **Vem depois de:** M5 fechado, M3 fechado (recomendado)
+> **Tamanho relativo:** médio (entre M5 e M3)
+
+Este documento existe pra **alinhar a visão**. Detalhes técnicos (schema exato, nomes de endpoint, libs específicas) são decididos na hora da implementação — não aqui.
 
 ---
 
-## 🎯 Por que estamos fazendo isso
+## O problema
 
-Hoje:
-- `is_public` é toggle binário **por tabela** — ou aparece em `/explore` e `/{slug}`, ou não.
-- `/{slug}` lista **todas** as tabelas públicas — sem ordem, sem curadoria, sem tema customizado.
-- `/admin/publish` (Theme Studio) é **mock visual** com botões disabled. Ver `// TODO(M6)` markers.
-- Não há concept de "deploy" ou "snapshot" — qualquer mudança no DB reflete imediatamente no público.
+Hoje, "publicar" é apenas um toggle `is_public` por tabela. Quando esse toggle está ligado, a tabela aparece em `/explore` e em `/{slug}`. Pronto. Não existe:
 
-**Problema:** Diretor quer compartilhar o database como uma "publicação". Hoje só dá pra mandar o link `/{slug}` que mostra tudo cru. Falta:
-- Seleção curada (quais tabelas, em que ordem)
-- Tema próprio (cores, fontes, layout do site público — não do admin)
-- Snapshot estável (publicação = freeze, não live)
-- Export pra hospedar fora (Vercel/Netlify estático, ou ZIP pra arquivar)
+- Curadoria — quais tabelas vão pro site, em que ordem, com qual destaque
+- Tema próprio do site público (separado do admin)
+- Versão / freeze — qualquer mudança no DB vaza pro público no mesmo segundo
+- Histórico — não dá pra voltar pra "como o site estava semana passada"
+- Exportação — não dá pra baixar o site como pacote estático
+
+A página `/admin/publish` que existe hoje é mock visual com botões disabled marcados `// TODO(M6)`.
+
+**Quem sente isso:** o admin que quer compartilhar o database como uma "publicação curada", não como um dump cru.
 
 ---
 
-## 📐 Arquitetura alvo
+## O que essa milestone entrega
 
-### Conceito: "Publication"
-Uma **publication** é um snapshot configurado de um workspace. Ela contém:
-- `id`, `slug`, `version`, `created_at`, `published_at`
-- `theme_config` JSON (preset + overrides de cor/font)
-- `tables` JSON (lista ordenada de table_ids selecionadas, cada uma com layout hint: "hero", "list", "grid", "ensaio")
-- `snapshot_url` (S3 ou file system) com JSON dump completo dos dados na hora da publicação
-- `is_active` (uma publication ativa por workspace)
+- Conceito de **publicação versionada**: snapshot estável do estado escolhido em um momento.
+- **Theme Studio funcional**: presets visuais + ajustes (cor, tipografia) aplicados ao site público.
+- **Seleção curada**: admin escolhe quais tabelas entram, em que ordem, com qual layout (lista, grid, ensaio).
+- **Activate / rollback**: nova publish substitui a anterior; histórico permite voltar.
+- **Export estático**: baixa um pacote (ZIP) que abre standalone — pra arquivo, demo offline, ou hospedar fora.
 
-### Tabela nova: `_publications`
-```sql
-CREATE TABLE _publications (
-  id INTEGER PRIMARY KEY,
-  workspace_id INTEGER REFERENCES users(id),
-  slug VARCHAR NOT NULL,
-  version INTEGER NOT NULL DEFAULT 1,
-  theme_config JSON,
-  tables_config JSON,      -- [{table_id, position, layout: 'hero|list|grid|ensaio'}]
-  snapshot_path VARCHAR,   -- caminho do dump congelado
-  is_active BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP,
-  published_at TIMESTAMP,
-  UNIQUE(workspace_id, slug, version)
-);
-```
+O site público sai do estado "live mirror do DB" pra "publicação editada", que é o que faz sentido pra Mora.
 
-### Endpoints novos
-| Método | Path | O que faz |
+---
+
+## Princípios invioláveis
+
+1. **Snapshot, não live.** Mudança no admin não vaza pro público até "Publicar mudanças". Reduz surpresa, aumenta controle.
+2. **Site público nunca cai porque o backend caiu.** Snapshot serve de cache se a API falhar.
+3. **Tema do site é separado do tema do admin.** O admin escolhe um tema editorial pra ele trabalhar; o site público pode ter outro completamente diferente.
+4. **Versão é imutável.** Uma vez publicada, aquela versão fica como está; mudanças geram nova versão.
+5. **Workspace isolado.** Publicação de um workspace nunca vaza dados de outro (vale tudo que M3 já garante).
+
+---
+
+## Fases (alto nível, ordem)
+
+| # | Marco | Por que precisa |
 |---|---|---|
-| `POST` | `/api/publish/preview` | Gera preview sem persistir — mostra como ficaria o site |
-| `POST` | `/api/publish/snapshot` | Cria nova `_publication` com snapshot do estado atual |
-| `POST` | `/api/publish/{id}/activate` | Marca publication como ativa (substitui a anterior) |
-| `GET` | `/api/publish/history` | Lista publications anteriores |
-| `POST` | `/api/publish/{id}/rollback` | Restaura publication anterior |
-| `POST` | `/api/publish/{id}/export` | Gera ZIP com HTML+JSON |
-| `GET` | `/api/public/site/{slug}` | Serve dados da publication ativa (substitui `/api/public/tables`) |
+| 1 | Modelar publicação no backend | Sem dados persistidos, nada do resto funciona |
+| 2 | Theme Studio frontend funcional | Mock atual vira real; preview ao vivo |
+| 3 | Seletor de tabelas com layouts | Curadoria — coração da feature |
+| 4 | Snapshot + activate + history + rollback | Versionamento real |
+| 5 | Export estático | Caso de uso "arquivo / demo offline" |
+| 6 | (Opcional) Subdomain routing | Se demanda real surgir, depois das 5 anteriores |
 
-### Routing público
-```
-/{slug}                    → atualmente lista raw das tabelas públicas
-/{slug}                    → após M6: serve da publication ativa, com tema e ordem definidos
-/{slug}/{table_name}       → drill-down de uma tabela específica (já existe parcial)
-slug.atlas.app             → fase 5 (subdomain), opcional
-```
+Cada fase é seu próprio PR. Entre fases, smoke manual antes de seguir.
 
 ---
 
-## 🧭 Fases
+## Decisões em aberto (perguntar ao Diretor antes da Fase 1)
 
-| Fase | Entrega | Duração |
-|---|---|---|
-| **Fase 0** | Pré-requisitos: M5 mergeado, Theme Studio refs revisitadas | 1 dia |
-| **Fase 1** | Modelo `_publications` + migration Alembic + endpoints CRUD básicos | 2-3 dias |
-| **Fase 2** | Theme Studio frontend wired (preview + presets reais) | 3-4 dias |
-| **Fase 3** | Seletor de tabelas com layout hints (hero/list/grid/ensaio) | 2-3 dias |
-| **Fase 4** | Snapshot + activation + history/rollback | 2-3 dias |
-| **Fase 5** | Export estático (ZIP com HTML pré-renderizado + JSON) | 3 dias |
-| **Fase 6** | (Opcional) Subdomain routing `slug.atlas.app` via Vercel rewrites | 2 dias |
-| **Fase 7** | TestSprite + smoke manual | 2-3 dias |
+Estas são decisões que **vou levantar** no início da implementação, não decidir sozinho aqui:
 
-**Total:** ~15-20 dias úteis.
+- **Onde mora o snapshot?** Filesystem do servidor / Supabase Storage / S3 / outro. Depende de como M3 ficou e de onde vamos hospedar.
+- **Path-based ou subdomain?** `atlas.app/{slug}` (simples, sem DNS) ou `{slug}.atlas.app` (profissional, precisa wildcard). Recomendação inicial: começar path, migrar se houver demanda.
+- **Quantas versões guardar?** Disco cresce. Sugestão default: 10 últimas + 1 por mês. Diretor decide.
+- **Custom domain do cliente** (`centrobudista.com.br` apontando pro Atlas)? Cool, mas é projeto à parte (DNS verification + SSL). Provavelmente fica fora desta milestone.
+- **Tabelas de sistema entram no site público?** Provavelmente não. Confirmar.
 
 ---
 
-## 🎨 Fase 2 detalhada — Theme Studio
+## Riscos
 
-A página `/admin/publish` já existe como mock. Esta fase wired ela:
-
-### Presets visuais (3 iniciais)
-1. **Editorial** (default) — Mora Parchment + Fraunces + magazine layout
-2. **Minimalista** — neutros + sans-serif + grid simples
-3. **Bold** — accent forte + display typography + grandes blocos
-
-Cada preset é um JSON com:
-```json
-{
-  "name": "editorial",
-  "tokens": {
-    "bg-page": "#FAEFD9",
-    "fg-primary": "#212842",
-    "accent": "#DAA63E",
-    "font-display": "Fraunces"
-  },
-  "layout_defaults": {
-    "hero": "magazine",
-    "table_card": "editorial"
-  }
-}
-```
-
-### Tabs de customização
-- **Tipografia:** select de display font (Fraunces / Playfair / Times New Roman) + body font (Plex Sans / Inter / system-ui)
-- **Cor:** color picker pro accent + toggle dark/light pro modo padrão do site
-- **Layout:** densidade (compact/regular/loose) + ordem de seções (drag-drop futuro)
-
-### Preview iframe
-- Abre `/admin/publish/preview/{workspace_slug}` em iframe lateral
-- Aplica tokens via query params ou postMessage
-- Live-update conforme tabs mudam
+- **Subdomain routing tem pegadinhas** em Vercel/Next 16 — wildcard rewrites funcionam, mas SSL e dev local pedem setup extra. Por isso é Fase 6 opcional.
+- **Storage cresce.** Cada snapshot pode ter MBs. Política de retenção precisa ser clara.
+- **Cache invalidation.** Quando publicar nova versão, os clientes que abriram a antiga continuam vendo? CDN cache? Precisa pensar no momento da Fase 4.
 
 ---
 
-## 📤 Fase 5 detalhada — Export
+## Critério de sucesso (alto nível)
 
-Exportar gera um ZIP com:
-```
-publication_{slug}_v{version}.zip
-├── index.html          (página inicial do site, pré-renderizada)
-├── _data/
-│   ├── tables.json     (índice das tabelas)
-│   ├── {table}.json    (uma por tabela)
-│   └── relations.json  (FKs)
-├── _assets/
-│   ├── styles.css      (tokens + layout do tema escolhido)
-│   └── fonts/          (web fonts subset)
-└── README.md           (como hospedar — Netlify drop, GitHub Pages, etc.)
-```
+Admin consegue:
 
-### Implementação
-- Backend: `POST /api/publish/{id}/export` → roda render server-side com Next.js render API ou template engine simples (Jinja2)
-- Empacota com `zipfile` (Python stdlib)
-- Retorna Blob streamable
-- Frontend: download direto do response
+1. Selecionar 5 tabelas, escolher um preset visual, clicar "Publicar".
+2. Abrir o link público e ver essas 5 tabelas com o tema aplicado, na ordem escolhida.
+3. Mudar dados no admin sem que isso vaze pro público até nova "Publicar".
+4. Voltar pra versão anterior em um clique.
+5. Baixar um ZIP que abre como site estático em qualquer navegador.
+
+Não-objetivos desta milestone (ficam pra outra hora):
+- Edição colaborativa em tempo real
+- Comments / engajamento no site público
+- Analytics / tracking
+- Custom domains do cliente
+- Múltiplas publicações ativas em paralelo (A/B test)
 
 ---
 
-## ⚠️ Decisões em aberto (perguntar ao Diretor antes de começar)
+## Dependências
 
-1. **Subdomain ou path-based?** `puczaras.atlas.app` ou `atlas.app/puczaras`?
-   - Path: simples, sem DNS configuration. Custo: SEO perde ranking individual por workspace.
-   - Subdomain: profissional, indexação separada. Custo: precisa wildcard DNS + Vercel config.
-   - **Recomendação:** começar path-based (`/{slug}`), migrar pra subdomain quando tiver demanda real.
-
-2. **Snapshot ou live?** Publication é freeze do momento ou reflete mudanças do DB?
-   - Freeze: estável, previsível, mas precisa "publicar" toda vez que muda.
-   - Live: zero overhead pro admin, mas qualquer bug no admin vaza pro público.
-   - **Recomendação:** **freeze** com botão "Publicar mudanças" — menos surpresa, maior controle.
-
-3. **Storage do snapshot:** S3? Filesystem local? Supabase Storage?
-   - Local: simples, mas não escala em multi-server.
-   - **Recomendação:** Supabase Storage (gratuito até 1GB, integra com M3).
-
-4. **Versioning:** quantas publications passadas guardar?
-   - Disk grows. Sugiro 10 últimas + última de cada mês.
-
-5. **Custom domain (cliente traz seu domínio):** suportar `centrobudista.com.br` apontando pro Atlas?
-   - Cool feature, mas DNS verification + SSL provisioning é um projeto à parte.
-   - **Recomendação:** fora de M6, fica pra M6.5 ou backlog.
-
----
-
-## 🧾 Critério de aceite
-
-- [ ] Admin consegue selecionar 5 tabelas, escolher preset "Editorial", clicar "Publicar"
-- [ ] URL `/{slug}` mostra essas 5 tabelas com tema aplicado
-- [ ] Mudanças posteriores no DB **não** vazam pro público até nova publish
-- [ ] Botão "Exportar pacote" gera ZIP que abre como site estático localmente
-- [ ] Histórico mostra publicações anteriores; botão "Restaurar" volta pra versão antiga
-- [ ] Site público continua funcionando se backend cair (snapshot servido de cache)
-- [ ] `pytest -q` passa em backend (novos testes pra `_publications`, snapshot, rollback)
-- [ ] Smoke manual: 2 admins diferentes publicam workspaces diferentes, não vazam dados
-
----
-
-## 🔗 Dependências
-
-- **Bloqueia:** nenhum milestone direto.
-- **Bloqueado por:** M5 fechar (Theme Studio mock precisa virar real).
-- **Sinergia com:** M3 (Supabase Storage natural pra snapshots), M9 (audit log de publish events).
+- **Bloqueia:** nada.
+- **Bloqueado por:** M5 (Theme Studio mock precisa virar real). M3 fortemente recomendado (sem isolamento físico, "publicar workspace X" continua sendo "filtrar prefixo no SQLite").
+- **Sinergia com:** M9 (audit log de publish events), M3 (Storage natural).
