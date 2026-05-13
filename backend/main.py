@@ -90,6 +90,11 @@ def create_admin(user_data: schemas.UserCreate, db: Session = Depends(get_db), m
     db.add(new_admin)
     db.commit()
     db.refresh(new_admin)
+
+    # M3 Fase 3: provisiona o schema tenant_N em Postgres (no-op em SQLite).
+    from dynamic_schema import ensure_tenant_schema
+    ensure_tenant_schema(new_admin.id)
+
     return new_admin
 
 @app.get("/api/admins", response_model=List[schemas.UserResponse])
@@ -349,8 +354,7 @@ def create_table(table: schemas.TableCreate, db: Session = Depends(get_db), curr
 
     # 2. Register columns + collect FK specs
     cols_data_for_ddl = []
-    fk_specs = []  # [{from_col, to_table (physical), to_col, to_table_name (logical), to_table_id}]
-    prefix = get_tenant_prefix(current_user)
+    fk_specs = []  # [{from_col, to_table (LOGICAL), to_col, to_table_id}]
 
     for col in table.columns:
         db_col = models.DynamicColumn(
@@ -371,7 +375,6 @@ def create_table(table: schemas.TableCreate, db: Session = Depends(get_db), curr
             'is_unique': col.is_unique,
             'is_primary': col.is_primary
         })
-        # Collect FK if defined
         if col.fk_table and col.fk_column:
             ref_table = db.query(models.DynamicTable).filter(
                 models.DynamicTable.name == col.fk_table,
@@ -380,21 +383,29 @@ def create_table(table: schemas.TableCreate, db: Session = Depends(get_db), curr
             if ref_table:
                 fk_specs.append({
                     'from_col': col.name,
-                    'to_table': f"{prefix}{col.fk_table}",
+                    'to_table': col.fk_table,        # nome LÓGICO; dynamic_schema resolve por engine.
                     'to_col': col.fk_column,
-                    'to_table_name': col.fk_table,
                     'to_table_id': ref_table.id,
                 })
     db.commit()
 
     # 3. Create physical table (with FK constraints if any)
-    physical_name = f"{prefix}{table.name}"
-    physical_fks = [{'from_col': f['from_col'], 'to_table': f['to_table'], 'to_col': f['to_col']} for f in fk_specs]
-    success, msg = create_physical_table(physical_name, cols_data_for_ddl, foreign_keys=physical_fks or None)
+    physical_fks = [
+        {'from_col': f['from_col'], 'to_table': f['to_table'], 'to_col': f['to_col']}
+        for f in fk_specs
+    ]
+    success, msg, schema_name, physical_name = create_physical_table(
+        table.name, cols_data_for_ddl, tenant_id=owner_id, foreign_keys=physical_fks or None,
+    )
     if not success:
         db.delete(db_table)
         db.commit()
         raise HTTPException(status_code=400, detail=msg)
+
+    db_table.schema_name = schema_name
+    db_table.physical_name = physical_name
+    db.commit()
+    db.refresh(db_table)
 
     # 4. Register DynamicRelation records for each FK
     for fk in fk_specs:
@@ -865,13 +876,17 @@ async def import_sql_script(file: UploadFile = File(...), db: Session = Depends(
                 cols_info = inspector.get_columns(physical_name)
 
                 # Register _tables + _columns atomically in one commit
+                # NB: import SQL ainda usa o caminho legado (prefixo no public). A
+                # migração pra schema-per-tenant aqui fica pra um PR futuro porque
+                # exige reescrita do parser/`_parse_sql_statements` pra injetar
+                # schema + coluna tenant_id na DDL crua importada.
                 db_table = models.DynamicTable(
                     name=table_name,
                     description=f"Imported from: {file.filename}",
                     owner_id=current_admin.id,
                     is_public=False,
                     tenant_id=current_admin.id,
-                    physical_name=table_name,
+                    physical_name=physical_name,  # nome real no DB (legado: com prefixo)
                 )
                 db.add(db_table)
                 db.flush()  # get db_table.id without committing yet
