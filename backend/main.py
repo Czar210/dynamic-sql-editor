@@ -6,7 +6,7 @@ from typing import List
 import io
 
 import models, schemas
-from database import engine, Base, get_db
+from database import engine, get_db
 from dynamic_schema import create_physical_table
 from auth import (
     auth_router, create_master_account,
@@ -14,106 +14,13 @@ from auth import (
     get_password_hash
 )
 
-# Migration: add missing columns to existing databases
-from sqlalchemy import inspect, text as _text
-
-def _safe_migrate(db_engine):
-    """Add missing columns/tables for existing databases migrating to 3-tier schema"""
-    inspector = inspect(db_engine)
-    with db_engine.connect() as conn:
-        # --- users table ---
-        if "users" in inspector.get_table_names():
-            existing_cols = [c["name"] for c in inspector.get_columns("users")]
-            if "parent_id" not in existing_cols:
-                try:
-                    conn.execute(_text("ALTER TABLE users ADD COLUMN parent_id INTEGER"))
-                    conn.commit()
-                except Exception:
-                    conn.rollback()
-            if "role" not in existing_cols:
-                try:
-                    conn.execute(_text("ALTER TABLE users ADD COLUMN role VARCHAR DEFAULT 'admin'"))
-                    conn.commit()
-                except Exception:
-                    conn.rollback()
-
-        # --- _tables table ---
-        if "_tables" in inspector.get_table_names():
-            existing_cols = [c["name"] for c in inspector.get_columns("_tables")]
-            for col_name, col_def in [
-                ("group_id", "INTEGER"),
-                ("is_public", "BOOLEAN DEFAULT FALSE"),
-                ("owner_id", "INTEGER"),
-            ]:
-                if col_name not in existing_cols:
-                    try:
-                        conn.execute(_text(f"ALTER TABLE _tables ADD COLUMN {col_name} {col_def}"))
-                        conn.commit()
-                    except Exception:
-                        conn.rollback()
-
-        # --- _columns table: add fk_table, fk_column ---
-        if "_columns" in inspector.get_table_names():
-            existing_cols = [c["name"] for c in inspector.get_columns("_columns")]
-            for col_name, col_def in [
-                ("fk_table", "VARCHAR"),
-                ("fk_column", "VARCHAR"),
-            ]:
-                if col_name not in existing_cols:
-                    try:
-                        conn.execute(_text(f"ALTER TABLE _columns ADD COLUMN {col_name} {col_def}"))
-                        conn.commit()
-                    except Exception:
-                        conn.rollback()
-
-        # --- _tables: backfill owner_id for pre-migration rows ---
-        if "_tables" in inspector.get_table_names():
-            try:
-                conn.execute(_text(
-                    "UPDATE _tables SET owner_id = "
-                    "(SELECT id FROM users WHERE role = 'master' LIMIT 1) "
-                    "WHERE owner_id IS NULL"
-                ))
-                conn.commit()
-            except Exception:
-                conn.rollback()
-
-        # --- _relations table ---
-        if "_relations" in inspector.get_table_names():
-            existing_cols = [c["name"] for c in inspector.get_columns("_relations")]
-            for col_name, col_def in [
-                ("from_column_name", "VARCHAR"),
-                ("to_column_name", "VARCHAR"),
-            ]:
-                if col_name not in existing_cols:
-                    try:
-                        conn.execute(_text(f"ALTER TABLE _relations ADD COLUMN {col_name} {col_def}"))
-                        conn.commit()
-                    except Exception:
-                        conn.rollback()
-
-        # --- users: workspace editorial fields ---
-        if "users" in inspector.get_table_names():
-            existing_cols = [c["name"] for c in inspector.get_columns("users")]
-            for col_name, col_def in [
-                ("workspace_name", "VARCHAR"),
-                ("workspace_slug", "VARCHAR"),
-            ]:
-                if col_name not in existing_cols:
-                    try:
-                        conn.execute(_text(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}"))
-                        conn.commit()
-                    except Exception:
-                        conn.rollback()
-
 app = FastAPI(title="Dynamic CMS API")
 
 @app.on_event("startup")
 def startup_event():
-    # Ensure tables exist
-    Base.metadata.create_all(bind=engine)
-    # Run migrations
-    _safe_migrate(engine)
+    # Schema é gerenciado por Alembic — `alembic upgrade head` antes do deploy.
+    # `Base.metadata.create_all` continua sendo usado pelo conftest dos testes
+    # (in-memory SQLite isolado por teste), mas não roda no runtime do app.
     # Seed master account
     db_seed = next(get_db())
     try:
@@ -513,7 +420,7 @@ def get_tables(db: Session = Depends(get_db), current_user: models.User = Depend
         row_count = 0
         physical_name = f"t{t.owner_id}_{t.name}" if t.owner_id else t.name
         try:
-            row_count = db.execute(_text(f"SELECT COUNT(*) FROM \"{physical_name}\"")).scalar() or 0
+            row_count = db.execute(text(f"SELECT COUNT(*) FROM \"{physical_name}\"")).scalar() or 0
         except Exception:
             row_count = 0
         resp = schemas.TableResponse.model_validate(t)
@@ -949,7 +856,7 @@ async def import_sql_script(file: UploadFile = File(...), db: Session = Depends(
             try:
                 # Execute DDL
                 with engine.begin() as conn:
-                    conn.execute(_text(prefixed_stmt))
+                    conn.execute(text(prefixed_stmt))
 
                 # Introspect columns from the newly created physical table
                 inspector = _inspect(engine)
@@ -989,7 +896,7 @@ async def import_sql_script(file: UploadFile = File(...), db: Session = Depends(
             prefixed_stmt = item["statement"]
             try:
                 with engine.begin() as conn:
-                    conn.execute(_text(prefixed_stmt))
+                    conn.execute(text(prefixed_stmt))
                 inserted_rows += 1
             except Exception as e:
                 errors.append(f"INSERT error for {table_name}: {str(e)}")
