@@ -279,15 +279,15 @@ def revoke_permission(group_id: int, mod_id: int, db: Session = Depends(get_db),
 # Helper: get accessible owner_id for tenant prefix
 # ==========================================
 
+from tenant_context import resolve_tenant_id, tenant_table_prefix
+
+# DEPRECATED: shim durante a migração M3. Remover na Fase 8.
 def get_tenant_prefix(user: models.User, db: Session = None) -> str:
-    """Get the tenant prefix for physical table names based on the admin owner."""
-    if user.role == "master":
-        return "master_"
-    elif user.role == "admin":
-        return f"t{user.id}_"
-    else:
-        # Moderator uses their parent admin's prefix
-        return f"t{user.parent_id}_"
+    """Prefixo legado para nomes físicos de tabelas dinâmicas no SQLite."""
+    tid = resolve_tenant_id(user)
+    if tid is None:
+        return "master_"  # master sem contexto fixo
+    return tenant_table_prefix(tid)
 
 def get_accessible_tables(user: models.User, db: Session):
     """Get tables accessible to the current user based on role and permissions."""
@@ -339,7 +339,9 @@ def create_table(table: schemas.TableCreate, db: Session = Depends(get_db), curr
         description=table.description,
         owner_id=owner_id,
         group_id=table.group_id,
-        is_public=table.is_public
+        is_public=table.is_public,
+        tenant_id=owner_id,           # tenant = admin dono (master pode setar owner_id de qualquer admin)
+        physical_name=table.name,     # mesmo valor durante a transição; sanitização em Fase 3
     )
     db.add(db_table)
     db.commit()
@@ -867,7 +869,9 @@ async def import_sql_script(file: UploadFile = File(...), db: Session = Depends(
                     name=table_name,
                     description=f"Imported from: {file.filename}",
                     owner_id=current_admin.id,
-                    is_public=False
+                    is_public=False,
+                    tenant_id=current_admin.id,
+                    physical_name=table_name,
                 )
                 db.add(db_table)
                 db.flush()  # get db_table.id without committing yet

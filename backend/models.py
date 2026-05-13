@@ -55,10 +55,18 @@ class DynamicTable(Base):
     name = Column(String, index=True, nullable=False)
     description = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    
+
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     group_id = Column(Integer, ForeignKey("database_groups.id"), nullable=True)
     is_public = Column(Boolean, default=False)
+
+    # Tenant metadata (M3 Fase 2):
+    # tenant_id    = admin id explícito; vai pra RLS no Postgres.
+    # schema_name  = "tenant_5" no Postgres; NULL no SQLite (fallback prefix).
+    # physical_name = nome real no schema (ex.: "clientes" — sem prefixo legado t5_).
+    tenant_id = Column(Integer, nullable=False, index=True)
+    schema_name = Column(String, nullable=True)
+    physical_name = Column(String, nullable=True)
 
     group = relationship("DatabaseGroup", back_populates="tables")
     columns = relationship("DynamicColumn", back_populates="table", cascade="all, delete-orphan")
