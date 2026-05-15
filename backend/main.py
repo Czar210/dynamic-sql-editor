@@ -502,16 +502,29 @@ def create_table(table: schemas.TableCreate, db: Session = Depends(get_db), curr
     return db_table
 
 @app.get("/tables/", response_model=List[schemas.TableResponse])
-def get_tables(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+def get_tables(
+    db: Session = Depends(tenant_db),
+    current_user: models.User = Depends(get_current_active_user),
+):
     tables = get_accessible_tables(current_user, db)
     result = []
     for t in tables:
         column_count = db.query(models.DynamicColumn).filter(models.DynamicColumn.table_id == t.id).count()
         relation_count = db.query(models.DynamicRelation).filter(models.DynamicRelation.from_table_id == t.id).count()
+        # row_count usa nome físico correto (schema-qualified em PG, prefixo em SQLite).
+        # Em savepoint pra não abortar a transação se a tabela física não existir
+        # (ex.: registro órfão em `_tables` após crash).
+        if is_postgres():
+            schema = t.schema_name or "public"
+            physical = t.physical_name or t.name
+            qualified = f'"{schema}"."{physical}"'
+        else:
+            physical = f"t{t.tenant_id}_{t.name}"
+            qualified = f'"{physical}"'
         row_count = 0
-        physical_name = f"t{t.owner_id}_{t.name}" if t.owner_id else t.name
         try:
-            row_count = db.execute(text(f"SELECT COUNT(*) FROM \"{physical_name}\"")).scalar() or 0
+            with db.begin_nested():
+                row_count = db.execute(text(f"SELECT COUNT(*) FROM {qualified}")).scalar() or 0
         except Exception:
             row_count = 0
         resp = schemas.TableResponse.model_validate(t)
@@ -1005,22 +1018,22 @@ async def import_sql_script(file: UploadFile = File(...), db: Session = Depends(
 import pandas as pd
 
 @app.post("/api/import/data/{table_name}")
-async def import_data_file(table_name: str, file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+async def import_data_file(
+    table_name: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(tenant_db),
+    current_user: models.User = Depends(get_current_active_user),
+):
     if current_user.role == "master":
         raise HTTPException(status_code=403, detail="Use an admin or moderator account for data imports")
-    
-    # Find accessible table
+
     accessible = get_accessible_tables(current_user, db)
     db_table = next((t for t in accessible if t.name == table_name), None)
     if not db_table:
         raise HTTPException(status_code=404, detail="Table not found or no access")
-    
-    prefix = f"t{db_table.owner_id}_"
-    physical_name = f"{prefix}{table_name}"
-    
-    meta = MetaData()
+
     try:
-        table = Table(physical_name, meta, autoload_with=engine)
+        table = _load_physical_table(db_table)
     except Exception:
         raise HTTPException(status_code=404, detail=f"Table {table_name} not found")
     
@@ -1054,11 +1067,15 @@ async def import_data_file(table_name: str, file: UploadFile = File(...), db: Se
         try:
             clean_record = {k: v for k, v in record.items() if v is not None}
             if clean_record:
+                # Defesa contra forge: força tenant_id na linha de import (PG).
+                if is_postgres() and "tenant_id" in table.columns:
+                    clean_record["tenant_id"] = db_table.tenant_id
                 stmt = insert(table).values(**clean_record)
-                db.execute(stmt)
+                with db.begin_nested():
+                    db.execute(stmt)
                 inserted += 1
         except Exception as e:
             errors.append(str(e))
-    
-    db.commit()
+
+    # commit cuidado pela dependency tenant_db
     return {"inserted_rows": inserted, "total_rows": len(records), "matched_columns": matching_columns, "errors": errors[:10]}
