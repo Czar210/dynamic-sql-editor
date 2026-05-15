@@ -1,8 +1,14 @@
 import os
-from sqlalchemy import create_engine, event
+from sqlalchemy import MetaData, create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./dynamic_template.db")
+
+# Schema das tabelas de sistema. Em Postgres (Supabase), fixamos `public`
+# para escapar do conflito com `auth.users` (Supabase Auth) — search_path
+# pode ser sobrescrito pelo pooler entre conexões. Em SQLite, schema=None
+# (não há schemas).
+_SYSTEM_SCHEMA = "public" if DATABASE_URL.startswith("postgres") else None
 
 
 def _engine_kwargs(url: str) -> dict:
@@ -27,7 +33,12 @@ if engine.dialect.name == "postgresql":
         cur.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+
+# Em PG, todas as system tables vão pra `public` schema (qualified no SQL
+# emitido pelo ORM), evitando colisão com `auth.users` mesmo se search_path
+# for resetado pelo pooler.
+_metadata = MetaData(schema=_SYSTEM_SCHEMA) if _SYSTEM_SCHEMA else MetaData()
+Base = declarative_base(metadata=_metadata)
 
 
 def get_db():
