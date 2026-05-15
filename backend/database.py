@@ -2,7 +2,10 @@ import os
 from sqlalchemy import MetaData, create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./dynamic_template.db")
+# `.strip()` defende contra newline/espaço acidentais no env var do
+# Railway/Vercel: copiar do dashboard às vezes traz \n no fim e quebra
+# o parser do psycopg2 com FATAL: database "postgres\n" does not exist.
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./dynamic_template.db").strip()
 
 # Schema das tabelas de sistema. Em Postgres (Supabase), fixamos `public`
 # para escapar do conflito com `auth.users` (Supabase Auth) — search_path

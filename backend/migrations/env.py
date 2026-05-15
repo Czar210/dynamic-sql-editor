@@ -22,8 +22,12 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    """DATABASE_URL é a fonte da verdade. Em dev, default p/ SQLite local."""
-    return os.environ.get("DATABASE_URL", "sqlite:///./dynamic_template.db")
+    """DATABASE_URL é a fonte da verdade. Em dev, default p/ SQLite local.
+
+    `.strip()` defende contra newline/espaço acidentais no env var
+    (Railway/Vercel ocasionalmente colam `\\n` no fim).
+    """
+    return os.environ.get("DATABASE_URL", "sqlite:///./dynamic_template.db").strip()
 
 
 def run_migrations_offline() -> None:
