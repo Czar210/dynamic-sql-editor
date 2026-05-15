@@ -6,8 +6,13 @@ from typing import List
 import io
 
 import models, schemas
-from database import engine, get_db
+from database import engine, get_db, is_postgres
 from dynamic_schema import create_physical_table
+from tenant_context import (
+    resolve_tenant_id,
+    set_tenant_for_session,
+    tenant_table_prefix,
+)
 from auth import (
     auth_router, create_master_account,
     get_current_active_user, get_current_admin, get_current_master,
@@ -284,8 +289,6 @@ def revoke_permission(group_id: int, mod_id: int, db: Session = Depends(get_db),
 # Helper: get accessible owner_id for tenant prefix
 # ==========================================
 
-from tenant_context import resolve_tenant_id, tenant_table_prefix
-
 # DEPRECATED: shim durante a migração M3. Remover na Fase 8.
 def get_tenant_prefix(user: models.User, db: Session = None) -> str:
     """Prefixo legado para nomes físicos de tabelas dinâmicas no SQLite."""
@@ -306,6 +309,81 @@ def get_accessible_tables(user: models.User, db: Session):
             models.ModeratorPermission.moderator_id == user.id
         ).subquery()
         return db.query(models.DynamicTable).filter(models.DynamicTable.group_id.in_(perm_groups)).all()
+
+
+# ==========================================
+# Tenant-aware DB dependencies (M3 Fase 4)
+# ==========================================
+
+def tenant_db(
+    current_user: models.User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Session com `app.tenant_id` setado em Postgres (no-op em SQLite).
+
+    Faz commit/rollback do request inteiro e libera o GUC com RESET ALL
+    antes de devolver a conexão ao pool. Endpoints que usam essa
+    dependency NÃO devem chamar `db.commit()` — a dependency cuida.
+    """
+    tid = resolve_tenant_id(current_user)
+    try:
+        set_tenant_for_session(db, tid)
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        if db.bind is not None and db.bind.dialect.name == "postgresql":
+            try:
+                db.execute(text("RESET ALL"))
+            except Exception:
+                pass
+
+
+def public_tenant_db(table_name: str, db: Session = Depends(get_db)):
+    """Resolve a tabela pública pelo nome lógico e seta `app.tenant_id`.
+
+    Sempre usa o `tenant_id` da própria linha de `_tables` — nunca master,
+    nunca confia em quem chamou (endpoint público, sem auth).
+    """
+    db_table = db.query(models.DynamicTable).filter(
+        models.DynamicTable.name == table_name,
+        models.DynamicTable.is_public == True,
+    ).first()
+    if not db_table:
+        raise HTTPException(status_code=404, detail="Table not found or not public")
+    try:
+        set_tenant_for_session(db, db_table.tenant_id)
+        yield db, db_table
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        if db.bind is not None and db.bind.dialect.name == "postgresql":
+            try:
+                db.execute(text("RESET ALL"))
+            except Exception:
+                pass
+
+
+def _load_physical_table(db_table: models.DynamicTable) -> Table:
+    """Reflete a tabela física do tenant a partir do metadata de `_tables`.
+
+    Postgres → schema-qualified (`tenant_N.clientes`).
+    SQLite   → prefixo legado (`t{tenant_id}_clientes`). Reconstruído a
+    partir de `tenant_id + name` por ser determinístico; ignora
+    `physical_name` (que para linhas legadas pode estar sem prefixo).
+    """
+    meta = MetaData()
+    if is_postgres():
+        schema = db_table.schema_name
+        physical = db_table.physical_name or db_table.name
+        return Table(physical, meta, autoload_with=engine, schema=schema)
+    physical = f"t{db_table.tenant_id}_{db_table.name}"
+    return Table(physical, meta, autoload_with=engine)
+
 
 # ==========================================
 # Table Management
@@ -546,26 +624,16 @@ def get_public_table_columns(table_name: str, db: Session = Depends(get_db)):
 
 @app.get("/public/api/{table_name}")
 def get_public_records(
-    table_name: str,
     filter_col: str = None, filter_val: str = None, filter_op: str = "eq",
     sort: str = None, order: str = "asc",
     search: str = None,
     limit: int = 100, offset: int = 0,
-    db: Session = Depends(get_db)
+    tenant_ctx: tuple = Depends(public_tenant_db),
 ):
-    db_table = db.query(models.DynamicTable).filter(
-        models.DynamicTable.name == table_name,
-        models.DynamicTable.is_public == True
-    ).first()
-    if not db_table:
-        raise HTTPException(status_code=404, detail="Table not found or not public")
-    
-    prefix = f"t{db_table.owner_id}_"
-    physical_name = f"{prefix}{table_name}"
-    
-    meta = MetaData()
+    db, db_table = tenant_ctx
+
     try:
-        table = Table(physical_name, meta, autoload_with=engine)
+        table = _load_physical_table(db_table)
     except Exception:
         raise HTTPException(status_code=404, detail="Physical table not found")
     
@@ -640,61 +708,67 @@ def get_public_relations(db: Session = Depends(get_db)):
 # ==========================================
 
 @app.post("/api/{table_name}")
-async def create_record(table_name: str, request: Request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
-    # Find the table in metadata to get owner_id
+async def create_record(
+    table_name: str,
+    request: Request,
+    db: Session = Depends(tenant_db),
+    current_user: models.User = Depends(get_current_active_user),
+):
     accessible = get_accessible_tables(current_user, db)
     db_table = next((t for t in accessible if t.name == table_name), None)
     if not db_table:
         raise HTTPException(status_code=404, detail="Table not found or no access")
-    
-    prefix = f"t{db_table.owner_id}_"
-    physical_name = f"{prefix}{table_name}"
-    
-    meta = MetaData()
+
     try:
-        table = Table(physical_name, meta, autoload_with=engine)
+        table = _load_physical_table(db_table)
     except Exception:
         raise HTTPException(status_code=404, detail="Physical table not found")
-    
+
     data = await request.json()
+    # Em Postgres, RLS força tenant_id via WITH CHECK. Sobrescrevemos no
+    # backend pra impedir cliente malicioso de tentar forjar outro tenant.
+    if is_postgres() and "tenant_id" in table.columns:
+        data["tenant_id"] = db_table.tenant_id
+
     stmt = insert(table).values(**data)
     result = db.execute(stmt)
-    db.commit()
     return {"message": "Record inserted", "id": result.inserted_primary_key[0]}
 
 @app.get("/api/{table_name}")
-def get_records(table_name: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+def get_records(
+    table_name: str,
+    db: Session = Depends(tenant_db),
+    current_user: models.User = Depends(get_current_active_user),
+):
     accessible = get_accessible_tables(current_user, db)
     db_table = next((t for t in accessible if t.name == table_name), None)
     if not db_table:
         raise HTTPException(status_code=404, detail="Table not found or no access")
-    
-    prefix = f"t{db_table.owner_id}_"
-    physical_name = f"{prefix}{table_name}"
-    
-    meta = MetaData()
+
     try:
-        table = Table(physical_name, meta, autoload_with=engine)
+        table = _load_physical_table(db_table)
     except Exception:
         raise HTTPException(status_code=404, detail=f"Physical table {table_name} not found")
-    
+
     stmt = select(table)
     result = db.execute(stmt)
     return [dict(row._mapping) for row in result.fetchall()]
 
 @app.put("/api/{table_name}/{record_id}")
-async def update_record(table_name: str, record_id: int, request: Request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+async def update_record(
+    table_name: str,
+    record_id: int,
+    request: Request,
+    db: Session = Depends(tenant_db),
+    current_user: models.User = Depends(get_current_active_user),
+):
     accessible = get_accessible_tables(current_user, db)
     db_table = next((t for t in accessible if t.name == table_name), None)
     if not db_table:
         raise HTTPException(status_code=404, detail="Table not found or no access")
-    
-    prefix = f"t{db_table.owner_id}_"
-    physical_name = f"{prefix}{table_name}"
-    
-    meta = MetaData()
+
     try:
-        table = Table(physical_name, meta, autoload_with=engine)
+        table = _load_physical_table(db_table)
     except Exception:
         raise HTTPException(status_code=404, detail=f"Physical table {table_name} not found")
 
@@ -706,26 +780,30 @@ async def update_record(table_name: str, record_id: int, request: Request, db: S
             raise HTTPException(status_code=400, detail="No primary key found for this table")
 
     data = await request.json()
+    # Não deixar cliente alterar tenant_id via UPDATE.
+    if is_postgres() and "tenant_id" in data:
+        data.pop("tenant_id", None)
+
     stmt = update(table).where(pk_col == record_id).values(**data)
     result = db.execute(stmt)
-    db.commit()
     if result.rowcount == 0:
          raise HTTPException(status_code=404, detail="Record not found")
     return {"message": "Record updated"}
 
 @app.delete("/api/{table_name}/{record_id}")
-def delete_record(table_name: str, record_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
+def delete_record(
+    table_name: str,
+    record_id: int,
+    db: Session = Depends(tenant_db),
+    current_user: models.User = Depends(get_current_active_user),
+):
     accessible = get_accessible_tables(current_user, db)
     db_table = next((t for t in accessible if t.name == table_name), None)
     if not db_table:
         raise HTTPException(status_code=404, detail="Table not found or no access")
-    
-    prefix = f"t{db_table.owner_id}_"
-    physical_name = f"{prefix}{table_name}"
-    
-    meta = MetaData()
+
     try:
-        table = Table(physical_name, meta, autoload_with=engine)
+        table = _load_physical_table(db_table)
     except Exception:
         raise HTTPException(status_code=404, detail=f"Physical table {table_name} not found")
 
@@ -738,7 +816,6 @@ def delete_record(table_name: str, record_id: int, db: Session = Depends(get_db)
 
     stmt = delete(table).where(pk_col == record_id)
     result = db.execute(stmt)
-    db.commit()
     if result.rowcount == 0:
          raise HTTPException(status_code=404, detail="Record not found")
     return {"message": "Record deleted"}
